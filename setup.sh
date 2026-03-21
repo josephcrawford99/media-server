@@ -176,10 +176,11 @@ echo "LaunchAgent installed."
 # ── 10. Start containers ──────────────────────────────────────
 step "Pulling and starting containers"
 cd "$MEDIA_ROOT"
-COMPOSE_CMD="docker compose"
 if [ "$USE_VPN" = true ]; then
     COMPOSE_CMD="docker compose -f docker-compose.yml -f docker-compose.vpn.yml"
     echo "VPN enabled — routing Transmission through Mullvad."
+else
+    COMPOSE_CMD="docker compose -f docker-compose.yml -f docker-compose.novpn.yml"
 fi
 $COMPOSE_CMD pull
 $COMPOSE_CMD up -d
