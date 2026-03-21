@@ -141,9 +141,13 @@ step "Configuring *arr stack connections"
 wait_and_get_key() {
     local name="$1" url="$2" config="$3"
     echo "Waiting for $name..."
-    for i in $(seq 1 30); do
-        curl -s "$url/ping" 2>/dev/null | grep -q "Pong" && break
-        sleep 2
+    for i in $(seq 1 60); do
+        # Apps return various responses — just check for HTTP 200
+        if curl -s -o /dev/null -w '%{http_code}' "$url/ping" 2>/dev/null | grep -q "200"; then
+            echo "  $name is up."
+            break
+        fi
+        sleep 3
     done
     if [ -f "$config" ]; then
         sed -n 's/.*<ApiKey>\(.*\)<\/ApiKey>.*/\1/p' "$config"
