@@ -108,7 +108,8 @@ else
                 -d account="$MULLVAD_ACCOUNT" \
                 -d pubkey="$PUBKEY")
             if echo "$RESPONSE" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+'; then
-                WG_ADDRESS="${RESPONSE}/32"
+                # Mullvad returns IPv4,IPv6 — gluetun only supports IPv4
+                WG_ADDRESS=$(echo "$RESPONSE" | cut -d',' -f1)
                 echo "WIREGUARD_PRIVATE_KEY=$PRIVKEY" > "$ENV_FILE"
                 echo "WIREGUARD_ADDRESSES=$WG_ADDRESS" >> "$ENV_FILE"
                 echo "VPN configured. Address: $WG_ADDRESS"
