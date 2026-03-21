@@ -31,8 +31,8 @@ fi
 echo "MacPorts: OK"
 
 # ── 2. Install packages ───────────────────────────────────────
-step "Installing colima, docker, docker-compose via MacPorts"
-sudo port install colima docker docker-compose
+step "Installing colima, docker, docker-compose-plugin via MacPorts"
+sudo port install colima docker docker-compose-plugin
 
 # ── 3. Start Colima ───────────────────────────────────────────
 step "Starting Colima (${COLIMA_CPU} CPU, ${COLIMA_MEM}GB RAM, ${COLIMA_DISK}GB disk)"
@@ -131,8 +131,8 @@ echo "LaunchAgent installed."
 # ── 10. Start containers ──────────────────────────────────────
 step "Pulling and starting containers"
 cd "$MEDIA_ROOT"
-docker-compose pull
-docker-compose up -d
+docker compose pull
+docker compose up -d
 
 # ── 11. Configure *arr stack via API ──────────────────────────
 step "Configuring *arr stack connections"
@@ -273,9 +273,9 @@ cat <<SUMMARY
        Plex picks them up automatically.
 
   Management:
-    cd $MEDIA_ROOT && docker-compose logs -f
-    cd $MEDIA_ROOT && docker-compose restart
-    cd $MEDIA_ROOT && docker-compose pull && docker-compose up -d
+    cd $MEDIA_ROOT && docker compose logs -f
+    cd $MEDIA_ROOT && docker compose restart
+    cd $MEDIA_ROOT && docker compose pull && docker compose up -d
     colima status
     pmset -g
 

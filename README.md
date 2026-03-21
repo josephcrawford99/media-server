@@ -1,6 +1,6 @@
 # Headless Media Server (macOS Monterey, Intel)
 
-Plex + Transmission + Prowlarr via Docker (Colima) on an old MacBook Pro.
+Plex + Sonarr + Radarr + Prowlarr + Transmission via Docker (Colima) on an old MacBook Pro.
 
 ## Prerequisites
 
@@ -16,44 +16,66 @@ chmod +x setup.sh
 ./setup.sh
 ```
 
-The script installs everything, prompts for your Plex claim token, configures power settings, and starts all services.
+The script installs everything, configures all app connections automatically, and starts all services.
 
 ## Services
 
-| Service      | URL                         | Purpose             |
-|-------------|-----------------------------|---------------------|
-| Plex        | http://SERVER:32400/web     | Media streaming     |
-| Transmission| http://SERVER:9091          | BitTorrent client   |
-| Prowlarr    | http://SERVER:9696          | Indexer manager     |
+| Service      | URL                         | Purpose                    |
+|-------------|-----------------------------|----------------------------|
+| Plex        | http://SERVER:32400/web     | Media streaming            |
+| Sonarr      | http://SERVER:8989          | TV show management         |
+| Radarr      | http://SERVER:7878          | Movie management           |
+| Prowlarr    | http://SERVER:9696          | Indexer/tracker manager    |
+| Transmission| http://SERVER:9091          | BitTorrent download client |
+
+## How It Works
+
+```
+Prowlarr (manages trackers/indexers)
+    ↓ syncs indexers to
+Sonarr (TV) / Radarr (Movies)
+    ↓ sends .torrent to
+Transmission (downloads to data/torrents/)
+    ↓ on completion
+Sonarr/Radarr hardlink to data/media/ (renamed, organized)
+    ↓
+Plex detects and serves
+```
 
 ## Directory Layout
 
+TRaSH Guides pattern — single `/data` root enables hardlinks (instant, zero extra disk space).
+
 ```
 ~/media-server/
-├── config/{plex,transmission,prowlarr}/
-├── media/{movies,tv,music,downloads/watch}/
-└── docker-compose.yml
+├── config/{plex,transmission,prowlarr,sonarr,radarr}/
+└── data/
+    ├── torrents/          ← Transmission downloads here
+    │   ├── movies/        ← Radarr category
+    │   ├── tv/            ← Sonarr category
+    │   ├── music/
+    │   └── watch/         ← drop .torrent files here
+    └── media/             ← organized media, Plex reads from here
+        ├── movies/        ← Radarr root folder
+        ├── tv/            ← Sonarr root folder
+        └── music/
 ```
-
-Drop `.torrent` files in `media/downloads/watch/` for auto-download.
 
 ## After Setup
 
-- **Enable auto-login**: System Preferences → Users & Groups → Login Options
-- **Keep plugged in**: Required for lid-closed (clamshell) mode
-- **Wake on LAN**: MAC address is printed by setup.sh — use any WOL app
+1. **Add indexers**: Prowlarr → Indexers → Add (pick your trackers). They auto-sync to Sonarr/Radarr.
+2. **Add movies**: Radarr → Movies → Add New → search → add
+3. **Add TV shows**: Sonarr → Series → Add New → search → add (monitors for new episodes)
+4. **Enable auto-login**: System Preferences → Users & Groups → Login Options
+5. **Keep plugged in**: Required for lid-closed (clamshell) mode
 
 ## Management
 
 ```bash
 cd ~/media-server
-docker-compose logs -f                          # view logs
-docker-compose restart                          # restart all
-docker-compose pull && docker-compose up -d     # update images
+docker compose logs -f                          # view logs
+docker compose restart                          # restart all
+docker compose pull && docker compose up -d     # update images
 colima status                                   # VM status
 pmset -g                                        # power settings
 ```
-
-## Power Settings
-
-The setup script configures the Mac to stay awake with display off (`sleep 0` + `displaysleep 2`). Idle draw is ~5-15W. Wake on LAN is enabled as a fallback. Spotlight indexing is disabled on media directories.
