@@ -209,8 +209,22 @@ for i in $(seq 1 30); do
     sleep 3
 done
 
-# Add FlareSolverr as indexer proxy in Prowlarr
+# Create 'flaresolverr' tag and add FlareSolverr proxy in Prowlarr
+# Indexers tagged 'flaresolverr' will route through FlareSolverr to bypass Cloudflare
 if [ -n "$PROWLARR_KEY" ]; then
+    FS_TAG_ID=$(curl -s -X POST "http://localhost:9696/api/v1/tag" \
+        -H "X-Api-Key: $PROWLARR_KEY" \
+        -H "Content-Type: application/json" \
+        -d "{\"label\": \"flaresolverr\"}" 2>/dev/null | sed -n 's/.*"id":\([0-9]*\).*/\1/p')
+    if [ -z "$FS_TAG_ID" ]; then
+        # Tag may already exist, fetch its id
+        FS_TAG_ID=$(curl -s "http://localhost:9696/api/v1/tag" \
+            -H "X-Api-Key: $PROWLARR_KEY" 2>/dev/null \
+            | sed -n 's/.*"label":"flaresolverr".*"id":\([0-9]*\).*/\1/p; s/.*"id":\([0-9]*\).*"label":"flaresolverr".*/\1/p' | head -1)
+    fi
+    FS_TAGS="[]"
+    [ -n "$FS_TAG_ID" ] && FS_TAGS="[$FS_TAG_ID]"
+
     curl -s -X POST "http://localhost:9696/api/v1/indexerProxy" \
         -H "X-Api-Key: $PROWLARR_KEY" \
         -H "Content-Type: application/json" \
@@ -218,12 +232,14 @@ if [ -n "$PROWLARR_KEY" ]; then
             \"name\": \"FlareSolverr\",
             \"implementation\": \"FlareSolverr\",
             \"configContract\": \"FlareSolverrSettings\",
+            \"tags\": $FS_TAGS,
             \"fields\": [
                 {\"name\": \"host\", \"value\": \"http://flaresolverr:8191\"},
                 {\"name\": \"requestTimeout\", \"value\": 60}
             ]
-        }" >/dev/null 2>&1 && echo "  Prowlarr: FlareSolverr proxy added." \
+        }" >/dev/null 2>&1 && echo "  Prowlarr: FlareSolverr proxy added with tag 'flaresolverr'." \
         || echo "  Prowlarr: Warning — add FlareSolverr manually (Settings → Indexers → Indexer Proxies)."
+    echo "  Tip: Tag indexers with 'flaresolverr' to route them through FlareSolverr."
 fi
 
 # Add Transmission as download client in each app
