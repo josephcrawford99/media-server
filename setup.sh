@@ -139,6 +139,23 @@ cd "$MEDIA_ROOT"
 docker compose pull
 docker compose up -d
 
+# ── 10a. Fix Transmission download paths ─────────────────────
+step "Configuring Transmission download directory"
+TRANS_SETTINGS="$MEDIA_ROOT/config/transmission/settings.json"
+# Wait for Transmission to create its settings file
+for i in $(seq 1 30); do
+    [ -f "$TRANS_SETTINGS" ] && break
+    sleep 2
+done
+if [ -f "$TRANS_SETTINGS" ]; then
+    docker compose stop transmission
+    sed -i '' 's|/downloads/complete|/data/torrents|g' "$TRANS_SETTINGS"
+    sed -i '' 's|/downloads/incomplete|/data/torrents/incomplete|g' "$TRANS_SETTINGS"
+    mkdir -p "$MEDIA_ROOT/data/torrents/incomplete"
+    docker compose start transmission
+    echo "Transmission download dir set to /data/torrents"
+fi
+
 # ── 11. Configure *arr stack via API ──────────────────────────
 step "Configuring *arr stack connections"
 
