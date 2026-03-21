@@ -93,33 +93,29 @@ if [ -f "$ENV_FILE" ] && grep -q 'WIREGUARD_PRIVATE_KEY=.' "$ENV_FILE"; then
 else
     read -rp "Set up Mullvad VPN for Transmission? (y/N): " VPN_CHOICE
     if [ "$VPN_CHOICE" = "y" ] || [ "$VPN_CHOICE" = "Y" ]; then
+        # Install wireguard-tools if not present
+        if ! command -v wg &>/dev/null; then
+            echo "Installing wireguard-tools..."
+            sudo port install wireguard-tools
+        fi
         read -rp "Enter your Mullvad account number: " MULLVAD_ACCOUNT
         if [ -n "$MULLVAD_ACCOUNT" ]; then
             echo "Generating WireGuard keys..."
-            PRIVKEY=$(wg genkey 2>/dev/null)
-            if [ -z "$PRIVKEY" ]; then
-                # wg not on host, pull gluetun image and use it
-                docker pull qmcgaw/gluetun:latest >/dev/null 2>&1
-                PRIVKEY=$(docker run --rm qmcgaw/gluetun:latest sh -c "wg genkey" 2>/dev/null)
-            fi
-            if [ -n "$PRIVKEY" ]; then
-                PUBKEY=$(echo "$PRIVKEY" | wg pubkey 2>/dev/null || echo "$PRIVKEY" | docker run --rm -i qmcgaw/gluetun:latest sh -c "wg pubkey" 2>/dev/null)
-                echo "Registering key with Mullvad..."
-                RESPONSE=$(curl -s -X POST "https://api.mullvad.net/wg/" \
-                    -d account="$MULLVAD_ACCOUNT" \
-                    -d pubkey="$PUBKEY")
-                if echo "$RESPONSE" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+'; then
-                    WG_ADDRESS="${RESPONSE}/32"
-                    echo "WIREGUARD_PRIVATE_KEY=$PRIVKEY" > "$ENV_FILE"
-                    echo "WIREGUARD_ADDRESSES=$WG_ADDRESS" >> "$ENV_FILE"
-                    echo "VPN configured. Address: $WG_ADDRESS"
-                    USE_VPN=true
-                else
-                    echo "Warning: Mullvad API error: $RESPONSE"
-                    echo "You can configure manually in $ENV_FILE"
-                fi
+            PRIVKEY=$(wg genkey)
+            PUBKEY=$(echo "$PRIVKEY" | wg pubkey)
+            echo "Registering key with Mullvad..."
+            RESPONSE=$(curl -s -X POST "https://api.mullvad.net/wg/" \
+                -d account="$MULLVAD_ACCOUNT" \
+                -d pubkey="$PUBKEY")
+            if echo "$RESPONSE" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+'; then
+                WG_ADDRESS="${RESPONSE}/32"
+                echo "WIREGUARD_PRIVATE_KEY=$PRIVKEY" > "$ENV_FILE"
+                echo "WIREGUARD_ADDRESSES=$WG_ADDRESS" >> "$ENV_FILE"
+                echo "VPN configured. Address: $WG_ADDRESS"
+                USE_VPN=true
             else
-                echo "Warning: Could not generate WireGuard key."
+                echo "Warning: Mullvad API error: $RESPONSE"
+                echo "You can configure manually in $ENV_FILE"
             fi
         fi
     else
