@@ -42,8 +42,22 @@ colima start \
     --disk "$COLIMA_DISK" \
     --mount-type virtiofs
 
+# Ensure Docker CLI can reach Colima's socket
+export DOCKER_HOST="unix://${HOME}/.colima/default/docker.sock"
+
 docker info >/dev/null 2>&1 || { echo "ERROR: Docker not responding"; exit 1; }
 echo "Docker is running via Colima."
+
+# Persist DOCKER_HOST for future shell sessions
+ZSHRC="$HOME/.zshrc"
+if [ -f "$ZSHRC" ] && grep -q 'DOCKER_HOST.*colima' "$ZSHRC"; then
+    echo "DOCKER_HOST already in .zshrc"
+else
+    echo '' >> "$ZSHRC"
+    echo '# Docker via Colima' >> "$ZSHRC"
+    echo 'export DOCKER_HOST="unix://${HOME}/.colima/default/docker.sock"' >> "$ZSHRC"
+    echo "Added DOCKER_HOST to .zshrc"
+fi
 
 # ── 4. Create directories ─────────────────────────────────────
 # TRaSH Guides pattern: single /data root enables hardlinks
