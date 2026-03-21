@@ -83,6 +83,50 @@ if [ "$CURRENT_UID" != "501" ] || [ "$CURRENT_GID" != "20" ]; then
 fi
 sed -i '' "s|TZ=America/New_York|TZ=$TZ|g" "$MEDIA_ROOT/docker-compose.yml"
 
+# ── 5b. Optional VPN setup (Mullvad WireGuard) ───────────────
+step "VPN setup (optional)"
+ENV_FILE="$MEDIA_ROOT/.env"
+USE_VPN=false
+if [ -f "$ENV_FILE" ] && grep -q 'WIREGUARD_PRIVATE_KEY=.' "$ENV_FILE"; then
+    echo "Mullvad VPN already configured."
+    USE_VPN=true
+else
+    read -rp "Set up Mullvad VPN for Transmission? (y/N): " VPN_CHOICE
+    if [ "$VPN_CHOICE" = "y" ] || [ "$VPN_CHOICE" = "Y" ]; then
+        read -rp "Enter your Mullvad account number: " MULLVAD_ACCOUNT
+        if [ -n "$MULLVAD_ACCOUNT" ]; then
+            echo "Generating WireGuard keys..."
+            PRIVKEY=$(wg genkey 2>/dev/null)
+            if [ -z "$PRIVKEY" ]; then
+                # wg not on host, pull gluetun image and use it
+                docker pull qmcgaw/gluetun:latest >/dev/null 2>&1
+                PRIVKEY=$(docker run --rm qmcgaw/gluetun:latest sh -c "wg genkey" 2>/dev/null)
+            fi
+            if [ -n "$PRIVKEY" ]; then
+                PUBKEY=$(echo "$PRIVKEY" | wg pubkey 2>/dev/null || echo "$PRIVKEY" | docker run --rm -i qmcgaw/gluetun:latest sh -c "wg pubkey" 2>/dev/null)
+                echo "Registering key with Mullvad..."
+                RESPONSE=$(curl -s -X POST "https://api.mullvad.net/wg/" \
+                    -d account="$MULLVAD_ACCOUNT" \
+                    -d pubkey="$PUBKEY")
+                if echo "$RESPONSE" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+'; then
+                    WG_ADDRESS="${RESPONSE}/32"
+                    echo "WIREGUARD_PRIVATE_KEY=$PRIVKEY" > "$ENV_FILE"
+                    echo "WIREGUARD_ADDRESSES=$WG_ADDRESS" >> "$ENV_FILE"
+                    echo "VPN configured. Address: $WG_ADDRESS"
+                    USE_VPN=true
+                else
+                    echo "Warning: Mullvad API error: $RESPONSE"
+                    echo "You can configure manually in $ENV_FILE"
+                fi
+            else
+                echo "Warning: Could not generate WireGuard key."
+            fi
+        fi
+    else
+        echo "Skipped. You can enable VPN later by re-running setup."
+    fi
+fi
+
 # ── 6. Plex claim token ───────────────────────────────────────
 step "Plex claim token"
 PLEX_PREFS="$MEDIA_ROOT/config/plex/Library/Application Support/Plex Media Server/Preferences.xml"
@@ -136,8 +180,13 @@ echo "LaunchAgent installed."
 # ── 10. Start containers ──────────────────────────────────────
 step "Pulling and starting containers"
 cd "$MEDIA_ROOT"
-docker compose pull
-docker compose up -d
+COMPOSE_CMD="docker compose"
+if [ "$USE_VPN" = true ]; then
+    COMPOSE_CMD="docker compose -f docker-compose.yml -f docker-compose.vpn.yml"
+    echo "VPN enabled — routing Transmission through Mullvad."
+fi
+$COMPOSE_CMD pull
+$COMPOSE_CMD up -d
 
 # ── 10a. Fix Transmission download paths ─────────────────────
 step "Configuring Transmission download directory"
