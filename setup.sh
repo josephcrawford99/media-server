@@ -224,6 +224,12 @@ wait_and_get_key() {
 }
 
 # Helper: add Transmission as download client
+# When VPN is enabled, Transmission shares gluetun's network
+TRANSMISSION_HOST="transmission"
+if [ "$USE_VPN" = true ]; then
+    TRANSMISSION_HOST="gluetun"
+fi
+
 add_transmission() {
     local name="$1" url="$2" key="$3" category="$4" api_ver="${5:-v3}"
     curl -s -X POST "$url/api/$api_ver/downloadclient" \
@@ -237,7 +243,7 @@ add_transmission() {
             \"enable\": true,
             \"priority\": 1,
             \"fields\": [
-                {\"name\": \"host\", \"value\": \"transmission\"},
+                {\"name\": \"host\", \"value\": \"$TRANSMISSION_HOST\"},
                 {\"name\": \"port\", \"value\": 9091},
                 {\"name\": \"urlBase\", \"value\": \"/transmission/\"},
                 {\"name\": \"tvCategory\", \"value\": \"$category\"},
