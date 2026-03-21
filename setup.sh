@@ -161,8 +161,8 @@ wait_and_get_key() {
 
 # Helper: add Transmission as download client
 add_transmission() {
-    local name="$1" url="$2" key="$3" category="$4"
-    curl -s -X POST "$url/api/v1/downloadclient" \
+    local name="$1" url="$2" key="$3" category="$4" api_ver="${5:-v3}"
+    curl -s -X POST "$url/api/$api_ver/downloadclient" \
         -H "X-Api-Key: $key" \
         -H "Content-Type: application/json" \
         -d "{
@@ -244,7 +244,7 @@ fi
 
 # Add Transmission as download client in each app
 if [ -n "$PROWLARR_KEY" ]; then
-    add_transmission "Prowlarr" "http://localhost:9696" "$PROWLARR_KEY" ""
+    add_transmission "Prowlarr" "http://localhost:9696" "$PROWLARR_KEY" "" "v1"
 fi
 if [ -n "$SONARR_KEY" ]; then
     add_transmission "Sonarr" "http://localhost:8989" "$SONARR_KEY" "tv"
