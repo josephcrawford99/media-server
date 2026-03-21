@@ -1,0 +1,49 @@
+version: "3.8"
+
+services:
+  plex:
+    image: linuxserver/plex:latest
+    container_name: plex
+    network_mode: host
+    environment:
+      - PUID=501
+      - PGID=20
+      - TZ=America/New_York
+      - VERSION=docker
+      - PLEX_CLAIM=${PLEX_CLAIM:-}
+    volumes:
+      - ./config/plex:/config
+      - ./media/movies:/movies
+      - ./media/tv:/tv
+      - ./media/music:/music
+    restart: unless-stopped
+
+  transmission:
+    image: linuxserver/transmission:latest
+    container_name: transmission
+    environment:
+      - PUID=501
+      - PGID=20
+      - TZ=America/New_York
+    volumes:
+      - ./config/transmission:/config
+      - ./media/downloads:/downloads
+      - ./media/downloads/watch:/watch
+    ports:
+      - "9091:9091"
+      - "51413:51413"
+      - "51413:51413/udp"
+    restart: unless-stopped
+
+  prowlarr:
+    image: linuxserver/prowlarr:latest
+    container_name: prowlarr
+    environment:
+      - PUID=501
+      - PGID=20
+      - TZ=America/New_York
+    volumes:
+      - ./config/prowlarr:/config
+    ports:
+      - "9696:9696"
+    restart: unless-stopped
