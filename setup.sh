@@ -199,6 +199,16 @@ PROWLARR_KEY=$(wait_and_get_key "Prowlarr" "http://localhost:9696" "$MEDIA_ROOT/
 SONARR_KEY=$(wait_and_get_key "Sonarr" "http://localhost:8989" "$MEDIA_ROOT/config/sonarr/config.xml")
 RADARR_KEY=$(wait_and_get_key "Radarr" "http://localhost:7878" "$MEDIA_ROOT/config/radarr/config.xml")
 
+# Wait for FlareSolverr to be ready
+echo "Waiting for FlareSolverr..."
+for i in $(seq 1 30); do
+    if curl -s -o /dev/null -w '%{http_code}' "http://localhost:8191" 2>/dev/null | grep -q "200\|405"; then
+        echo "  FlareSolverr is up."
+        break
+    fi
+    sleep 3
+done
+
 # Add FlareSolverr as indexer proxy in Prowlarr
 if [ -n "$PROWLARR_KEY" ]; then
     curl -s -X POST "http://localhost:9696/api/v1/indexerProxy" \
