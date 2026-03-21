@@ -85,19 +85,24 @@ sed -i '' "s|TZ=America/New_York|TZ=$TZ|g" "$MEDIA_ROOT/docker-compose.yml"
 
 # ── 6. Plex claim token ───────────────────────────────────────
 step "Plex claim token"
-echo "To link this Plex server to your account, you need a claim token."
-echo ""
-echo "  1. Open this URL in your browser:"
-echo "     https://www.plex.tv/claim/"
-echo ""
-echo "  2. Sign in and copy the claim token (starts with 'claim-')"
-echo ""
-read -rp "Paste your Plex claim token here (or press Enter to skip): " PLEX_CLAIM
-if [ -n "$PLEX_CLAIM" ]; then
-    export PLEX_CLAIM
-    echo "Claim token set."
+PLEX_PREFS="$MEDIA_ROOT/config/plex/Library/Application Support/Plex Media Server/Preferences.xml"
+if [ -f "$PLEX_PREFS" ] && grep -q 'PlexOnlineToken' "$PLEX_PREFS"; then
+    echo "Plex is already claimed. Skipping."
 else
-    echo "Skipped. You can claim later at http://<server-ip>:32400/web"
+    echo "To link this Plex server to your account, you need a claim token."
+    echo ""
+    echo "  1. Open this URL in your browser:"
+    echo "     https://www.plex.tv/claim/"
+    echo ""
+    echo "  2. Sign in and copy the claim token (starts with 'claim-')"
+    echo ""
+    read -rp "Paste your Plex claim token here (or press Enter to skip): " PLEX_CLAIM
+    if [ -n "$PLEX_CLAIM" ]; then
+        export PLEX_CLAIM
+        echo "Claim token set."
+    else
+        echo "Skipped. You can claim later at http://<server-ip>:32400/web"
+    fi
 fi
 
 # ── 7. Power management ───────────────────────────────────────
@@ -194,6 +199,23 @@ PROWLARR_KEY=$(wait_and_get_key "Prowlarr" "http://localhost:9696" "$MEDIA_ROOT/
 SONARR_KEY=$(wait_and_get_key "Sonarr" "http://localhost:8989" "$MEDIA_ROOT/config/sonarr/config.xml")
 RADARR_KEY=$(wait_and_get_key "Radarr" "http://localhost:7878" "$MEDIA_ROOT/config/radarr/config.xml")
 
+# Add FlareSolverr as indexer proxy in Prowlarr
+if [ -n "$PROWLARR_KEY" ]; then
+    curl -s -X POST "http://localhost:9696/api/v1/indexerProxy" \
+        -H "X-Api-Key: $PROWLARR_KEY" \
+        -H "Content-Type: application/json" \
+        -d "{
+            \"name\": \"FlareSolverr\",
+            \"implementation\": \"FlareSolverr\",
+            \"configContract\": \"FlareSolverrSettings\",
+            \"fields\": [
+                {\"name\": \"host\", \"value\": \"http://flaresolverr:8191\"},
+                {\"name\": \"requestTimeout\", \"value\": 60}
+            ]
+        }" >/dev/null 2>&1 && echo "  Prowlarr: FlareSolverr proxy added." \
+        || echo "  Prowlarr: Warning — add FlareSolverr manually (Settings → Indexers → Indexer Proxies)."
+fi
+
 # Add Transmission as download client in each app
 if [ -n "$PROWLARR_KEY" ]; then
     add_transmission "Prowlarr" "http://localhost:9696" "$PROWLARR_KEY" ""
@@ -256,6 +278,7 @@ cat <<SUMMARY
     Radarr (Film): http://${LOCAL_IP}:7878
     Prowlarr:      http://${LOCAL_IP}:9696
     Transmission:  http://${LOCAL_IP}:9091
+    FlareSolverr:  http://${LOCAL_IP}:8191
 
   Directories (TRaSH Guides pattern):
     Torrents:  $MEDIA_ROOT/data/torrents/

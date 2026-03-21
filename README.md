@@ -27,6 +27,7 @@ The script installs everything, configures all app connections automatically, an
 | Radarr      | http://SERVER:7878          | Movie management           |
 | Prowlarr    | http://SERVER:9696          | Indexer/tracker manager    |
 | Transmission| http://SERVER:9091          | BitTorrent download client |
+| FlareSolverr| http://SERVER:8191          | Cloudflare bypass proxy    |
 
 ## How It Works
 
