@@ -147,17 +147,15 @@ else
 fi
 
 # ── 7. Power management ───────────────────────────────────────
+# Goal: machine never sleeps (it's a server), display off when idle,
+# wake on LAN for remote access, survive lid closed.
 step "Configuring power management (requires sudo)"
-sudo pmset -a displaysleep 2
-sudo pmset -a sleep 0
-sudo pmset -a womp 1
-sudo pmset -a tcpkeepalive 1
-sudo pmset -a hibernatemode 0
-sudo pmset -a standby 0
-sudo pmset -a autopoweroff 0
-sudo pmset -a powernap 0
-sudo pmset -a disksleep 0
-sudo pmset -a acwake 1
+sudo pmset -a disablesleep 1     # never sleep, even with lid closed
+sudo pmset -a displaysleep 2     # turn off display after 2 min
+sudo pmset -a womp 1             # wake on LAN (magic packet)
+sudo pmset -a tcpkeepalive 1     # maintain network connections
+sudo pmset -a powernap 0         # no DarkWake maintenance cycles
+sudo pmset -a hibernatemode 0    # no hibernate to disk
 echo "Power settings applied. Verify with: pmset -g"
 
 # ── 8. Disable Spotlight on data ──────────────────────────────
