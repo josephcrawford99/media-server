@@ -160,7 +160,9 @@ echo "Power settings applied. Verify with: pmset -g"
 
 # ── 8. Disable Spotlight on data ──────────────────────────────
 step "Disabling Spotlight indexing on data directory"
-sudo mdutil -i off "$MEDIA_ROOT/data" 2>/dev/null || true
+# mdutil only works on volumes, so use .metadata_never_index marker instead
+touch "$MEDIA_ROOT/data/.metadata_never_index" 2>/dev/null || true
+echo "Spotlight indexing disabled for data directory."
 
 # ── 9. LaunchAgent for auto-start ─────────────────────────────
 step "Installing LaunchAgent for Colima auto-start"
@@ -175,9 +177,17 @@ launchctl unload "$PLIST_DST" 2>/dev/null || true
 launchctl load "$PLIST_DST"
 echo "LaunchAgent installed."
 
-# ── 10. Start containers ──────────────────────────────────────
+# ── 10. Pre-configure Transmission and start containers ──────
 step "Pulling and starting containers"
 cd "$MEDIA_ROOT"
+
+# Copy pre-configured Transmission settings before first start
+mkdir -p "$MEDIA_ROOT/config/transmission" "$MEDIA_ROOT/data/torrents/incomplete"
+if [ ! -f "$MEDIA_ROOT/config/transmission/settings.json" ]; then
+    cp "$SCRIPT_DIR/transmission-settings.json" "$MEDIA_ROOT/config/transmission/settings.json"
+    echo "Transmission pre-configured: /data/torrents, no seeding."
+fi
+
 if [ "$USE_VPN" = true ]; then
     COMPOSE_CMD="docker compose -f docker-compose.yml -f docker-compose.vpn.yml"
     echo "VPN enabled — routing Transmission through Mullvad."
@@ -186,29 +196,6 @@ else
 fi
 $COMPOSE_CMD pull
 $COMPOSE_CMD up -d
-
-# ── 10a. Fix Transmission download paths ─────────────────────
-step "Configuring Transmission download directory"
-TRANS_SETTINGS="$MEDIA_ROOT/config/transmission/settings.json"
-# Wait for Transmission to create its settings file
-for i in $(seq 1 30); do
-    [ -f "$TRANS_SETTINGS" ] && break
-    sleep 2
-done
-if [ -f "$TRANS_SETTINGS" ]; then
-    $COMPOSE_CMD stop transmission
-    # Fix download paths for TRaSH Guides layout
-    sed -i '' 's|/downloads/complete|/data/torrents|g' "$TRANS_SETTINGS"
-    sed -i '' 's|/downloads/incomplete|/data/torrents/incomplete|g' "$TRANS_SETTINGS"
-    # Disable seeding
-    sed -i '' 's|"ratio-limit-enabled": false|"ratio-limit-enabled": true|' "$TRANS_SETTINGS"
-    sed -i '' 's|"ratio-limit": 2.0|"ratio-limit": 0|' "$TRANS_SETTINGS"
-    sed -i '' 's|"idle-seeding-limit-enabled": false|"idle-seeding-limit-enabled": true|' "$TRANS_SETTINGS"
-    sed -i '' 's|"idle-seeding-limit": 30|"idle-seeding-limit": 1|' "$TRANS_SETTINGS"
-    mkdir -p "$MEDIA_ROOT/data/torrents/incomplete"
-    $COMPOSE_CMD start transmission
-    echo "Transmission configured: download dir /data/torrents, seeding disabled"
-fi
 
 # ── 11. Configure *arr stack via API ──────────────────────────
 step "Configuring *arr stack connections"
