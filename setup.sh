@@ -158,7 +158,6 @@ sudo pmset -a autopoweroff 0
 sudo pmset -a powernap 0
 sudo pmset -a disksleep 0
 sudo pmset -a acwake 1
-sudo nvram boot-args="iog=0x0"
 echo "Power settings applied. Verify with: pmset -g"
 
 # ── 8. Disable Spotlight on data ──────────────────────────────
