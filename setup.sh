@@ -368,6 +368,43 @@ if [ -n "$PROWLARR_KEY" ] && [ -n "$RADARR_KEY" ]; then
         || echo "  Prowlarr → Radarr: Warning — connect manually in Prowlarr UI."
 fi
 
+# Connect Sonarr/Radarr → Plex (library scan on import)
+PLEX_PREFS="$MEDIA_ROOT/config/plex/Library/Application Support/Plex Media Server/Preferences.xml"
+PLEX_TOKEN=""
+if [ -f "$PLEX_PREFS" ]; then
+    PLEX_TOKEN=$(grep -o 'PlexOnlineToken="[^"]*"' "$PLEX_PREFS" | cut -d'"' -f2)
+fi
+if [ -n "$PLEX_TOKEN" ]; then
+    add_plex_notify() {
+        local name="$1" url="$2" key="$3"
+        curl -s -X POST "$url/api/v3/notification" \
+            -H "X-Api-Key: $key" \
+            -H "Content-Type: application/json" \
+            -d "{
+                \"name\": \"Plex\",
+                \"implementation\": \"PlexServer\",
+                \"configContract\": \"PlexServerSettings\",
+                \"onDownload\": true,
+                \"onUpgrade\": true,
+                \"onRename\": true,
+                \"onEpisodeFileDelete\": true,
+                \"onMovieFileDelete\": true,
+                \"fields\": [
+                    {\"name\": \"host\", \"value\": \"host.docker.internal\"},
+                    {\"name\": \"port\", \"value\": 32400},
+                    {\"name\": \"useSsl\", \"value\": false},
+                    {\"name\": \"authToken\", \"value\": \"$PLEX_TOKEN\"},
+                    {\"name\": \"updateLibrary\", \"value\": true}
+                ]
+            }" >/dev/null 2>&1 && echo "  $name → Plex: library scan on import." \
+            || echo "  $name → Plex: Warning — add manually in Settings → Connect."
+    }
+    [ -n "$SONARR_KEY" ] && add_plex_notify "Sonarr" "http://localhost:8989" "$SONARR_KEY"
+    [ -n "$RADARR_KEY" ] && add_plex_notify "Radarr" "http://localhost:7878" "$RADARR_KEY"
+else
+    echo "  Plex not claimed yet — add Plex notification manually in Sonarr/Radarr Settings → Connect."
+fi
+
 # ── 12. Summary ────────────────────────────────────────────────
 step "Done! Your media server is running."
 LOCAL_IP=$(ipconfig getifaddr en0 2>/dev/null || echo "<your-ip>")
