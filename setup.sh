@@ -196,12 +196,18 @@ for i in $(seq 1 30); do
     sleep 2
 done
 if [ -f "$TRANS_SETTINGS" ]; then
-    docker compose stop transmission
+    $COMPOSE_CMD stop transmission
+    # Fix download paths for TRaSH Guides layout
     sed -i '' 's|/downloads/complete|/data/torrents|g' "$TRANS_SETTINGS"
     sed -i '' 's|/downloads/incomplete|/data/torrents/incomplete|g' "$TRANS_SETTINGS"
+    # Disable seeding
+    sed -i '' 's|"ratio-limit-enabled": false|"ratio-limit-enabled": true|' "$TRANS_SETTINGS"
+    sed -i '' 's|"ratio-limit": 2.0|"ratio-limit": 0|' "$TRANS_SETTINGS"
+    sed -i '' 's|"idle-seeding-limit-enabled": false|"idle-seeding-limit-enabled": true|' "$TRANS_SETTINGS"
+    sed -i '' 's|"idle-seeding-limit": 30|"idle-seeding-limit": 1|' "$TRANS_SETTINGS"
     mkdir -p "$MEDIA_ROOT/data/torrents/incomplete"
-    docker compose start transmission
-    echo "Transmission download dir set to /data/torrents"
+    $COMPOSE_CMD start transmission
+    echo "Transmission configured: download dir /data/torrents, seeding disabled"
 fi
 
 # ── 11. Configure *arr stack via API ──────────────────────────
