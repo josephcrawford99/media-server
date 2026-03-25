@@ -10,6 +10,21 @@ bold=$(tput bold); dim=$(tput setaf 8); reset=$(tput sgr0)
 echo "${bold}── Media Server Status ──${reset}"
 echo ""
 
+# Colima
+echo "${bold}Colima${reset}"
+if colima status &>/dev/null; then
+    COLIMA_INFO=$(colima list -j 2>/dev/null)
+    C_CPU=$(echo "$COLIMA_INFO" | python3 -c "import sys,json;print(json.load(sys.stdin).get('cpus','?'))" 2>/dev/null)
+    C_MEM=$(echo "$COLIMA_INFO" | python3 -c "import sys,json;print(json.load(sys.stdin).get('memory','?') // 1073741824)" 2>/dev/null)
+    C_DISK=$(echo "$COLIMA_INFO" | python3 -c "import sys,json;print(json.load(sys.stdin).get('disk','?') // 1073741824)" 2>/dev/null)
+    C_STATUS=$(echo "$COLIMA_INFO" | python3 -c "import sys,json;print(json.load(sys.stdin).get('status','?'))" 2>/dev/null)
+    echo "  Status: ${C_STATUS:-?}"
+    echo "  CPUs: ${C_CPU:-?}  Memory: ${C_MEM:-?}GB  Disk: ${C_DISK:-?}GB"
+else
+    echo "  Not running"
+fi
+echo ""
+
 # Containers
 echo "${bold}Containers${reset}"
 docker ps -a --format "  {{.Names}}: {{.Status}}" 2>/dev/null | sort
