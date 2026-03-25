@@ -56,11 +56,22 @@ if colima status &>/dev/null; then
     echo "Colima is already running. Restarting with new resource settings..."
     colima stop
 fi
+MACOS_VER=$(sw_vers -productVersion | cut -d. -f1)
+COLIMA_MOUNT="sshfs"
+COLIMA_VM_TYPE=()
+if [ "$MACOS_VER" -ge 13 ] 2>/dev/null; then
+    COLIMA_MOUNT="virtiofs"
+    COLIMA_VM_TYPE=(--vm-type vz)
+    echo "macOS $MACOS_VER detected — using vz + virtiofs."
+else
+    echo "macOS $MACOS_VER detected — using qemu + sshfs."
+fi
 colima start \
     --cpu "$COLIMA_CPU" \
     --memory "$COLIMA_MEM" \
     --disk "$COLIMA_DISK" \
-    --mount-type virtiofs
+    --mount-type "$COLIMA_MOUNT" \
+    "${COLIMA_VM_TYPE[@]}"
 
 # Ensure Docker CLI can reach Colima's socket
 export DOCKER_HOST="unix://${HOME}/.colima/default/docker.sock"
@@ -429,7 +440,83 @@ else
     echo "  Plex not claimed yet — add Plex notification manually in Sonarr/Radarr Settings → Connect."
 fi
 
-# ── 13. Summary ────────────────────────────────────────────────
+# ── 13. Health check ──────────────────────────────────────────
+step "Running health checks"
+HEALTH_OK=true
+
+check_http() {
+    local name="$1" url="$2"
+    if curl -s -o /dev/null -w '%{http_code}' "$url" 2>/dev/null | grep -q "200\|401\|302"; then
+        echo "  ✓ $name is reachable"
+    else
+        echo "  ✗ $name is NOT reachable at $url"
+        HEALTH_OK=false
+    fi
+}
+
+check_http "Plex" "http://localhost:32400/web"
+check_http "Sonarr" "http://localhost:8989"
+check_http "Radarr" "http://localhost:7878"
+check_http "Prowlarr" "http://localhost:9696"
+check_http "FlareSolverr" "http://localhost:8191"
+
+# Transmission is behind gluetun when VPN is enabled — check port 9091 either way
+check_http "Transmission" "http://localhost:9091/transmission/web/"
+
+# Verify Sonarr can reach its download client
+if [ -n "$SONARR_KEY" ]; then
+    SONARR_DL=$(curl -s "http://localhost:8989/api/v3/downloadclient" -H "X-Api-Key: $SONARR_KEY" 2>/dev/null)
+    if echo "$SONARR_DL" | python3 -c "import sys,json;clients=json.load(sys.stdin);assert any(c.get('enable') for c in clients)" 2>/dev/null; then
+        echo "  ✓ Sonarr → Transmission connected"
+    else
+        echo "  ✗ Sonarr has no active download client"
+        HEALTH_OK=false
+    fi
+fi
+
+# Verify Radarr can reach its download client
+if [ -n "$RADARR_KEY" ]; then
+    RADARR_DL=$(curl -s "http://localhost:7878/api/v3/downloadclient" -H "X-Api-Key: $RADARR_KEY" 2>/dev/null)
+    if echo "$RADARR_DL" | python3 -c "import sys,json;clients=json.load(sys.stdin);assert any(c.get('enable') for c in clients)" 2>/dev/null; then
+        echo "  ✓ Radarr → Transmission connected"
+    else
+        echo "  ✗ Radarr has no active download client"
+        HEALTH_OK=false
+    fi
+fi
+
+# Verify Prowlarr has app sync configured
+if [ -n "$PROWLARR_KEY" ]; then
+    PROWLARR_APPS=$(curl -s "http://localhost:9696/api/v1/applications" -H "X-Api-Key: $PROWLARR_KEY" 2>/dev/null)
+    PROWLARR_APP_COUNT=$(echo "$PROWLARR_APPS" | python3 -c "import sys,json;print(len(json.load(sys.stdin)))" 2>/dev/null)
+    if [ "${PROWLARR_APP_COUNT:-0}" -ge 2 ]; then
+        echo "  ✓ Prowlarr → Sonarr/Radarr sync configured ($PROWLARR_APP_COUNT apps)"
+    else
+        echo "  ✗ Prowlarr app sync missing (found ${PROWLARR_APP_COUNT:-0}, expected 2+)"
+        HEALTH_OK=false
+    fi
+fi
+
+# VPN check
+if [ "$USE_VPN" = true ]; then
+    VPN_IP=$(docker exec gluetun wget -qO- https://am.i.mullvad.net/ip 2>/dev/null)
+    if [ -n "$VPN_IP" ]; then
+        echo "  ✓ VPN active (IP: $VPN_IP)"
+    else
+        echo "  ✗ VPN not working — Transmission may be exposed"
+        HEALTH_OK=false
+    fi
+fi
+
+if [ "$HEALTH_OK" = true ]; then
+    echo ""
+    echo "  All checks passed."
+else
+    echo ""
+    echo "  Some checks failed — review above."
+fi
+
+# ── 14. Summary ────────────────────────────────────────────────
 step "Done! Your media server is running."
 LOCAL_IP=$(ipconfig getifaddr en0 2>/dev/null || echo "<your-ip>")
 MAC_ADDR=$(ifconfig en0 2>/dev/null | awk '/ether/{print $2}' || echo "<unknown>")
