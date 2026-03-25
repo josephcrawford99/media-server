@@ -2,9 +2,6 @@
 set -euo pipefail
 
 # ── Configuration ──────────────────────────────────────────────
-COLIMA_CPU=6
-COLIMA_MEM=12
-COLIMA_DISK=60
 MEDIA_ROOT="${1:-$HOME/media-server}"
 TZ="America/New_York"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -35,8 +32,26 @@ echo "MacPorts: OK"
 step "Installing colima, docker, docker-compose-plugin via MacPorts"
 sudo port install colima docker docker-compose-plugin
 
-# ── 3. Start Colima ───────────────────────────────────────────
-step "Starting Colima (${COLIMA_CPU} CPU, ${COLIMA_MEM}GB RAM, ${COLIMA_DISK}GB disk)"
+# ── 3. Colima resource allocation ────────────────────────────
+step "Colima VM resource allocation"
+TOTAL_CPU=$(sysctl -n hw.ncpu)
+TOTAL_MEM=$(( $(sysctl -n hw.memsize) / 1073741824 ))  # bytes → GB
+DEFAULT_CPU=$(( TOTAL_CPU > 2 ? TOTAL_CPU - 2 : 1 ))
+DEFAULT_MEM=$(( TOTAL_MEM > 4 ? TOTAL_MEM - 4 : 2 ))
+
+echo "This machine has ${bold}${TOTAL_CPU} CPUs${reset} and ${bold}${TOTAL_MEM}GB RAM${reset}."
+echo "Recommended: leave 2 CPUs and 4GB for macOS."
+echo ""
+read -rp "CPUs for Colima VM [${DEFAULT_CPU}]: " COLIMA_CPU
+COLIMA_CPU="${COLIMA_CPU:-$DEFAULT_CPU}"
+read -rp "Memory (GB) for Colima VM [${DEFAULT_MEM}]: " COLIMA_MEM
+COLIMA_MEM="${COLIMA_MEM:-$DEFAULT_MEM}"
+read -rp "Disk (GB) for Colima VM [60]: " COLIMA_DISK
+COLIMA_DISK="${COLIMA_DISK:-60}"
+echo "Allocating ${COLIMA_CPU} CPUs, ${COLIMA_MEM}GB RAM, ${COLIMA_DISK}GB disk."
+
+# ── 4. Start Colima ──────────────────────────────────────────
+step "Starting Colima"
 colima start \
     --cpu "$COLIMA_CPU" \
     --memory "$COLIMA_MEM" \
@@ -60,7 +75,7 @@ else
     echo "Added DOCKER_HOST to .zshrc"
 fi
 
-# ── 4. Create directories ─────────────────────────────────────
+# ── 5. Create directories ─────────────────────────────────────
 # TRaSH Guides pattern: single /data root enables hardlinks
 # when Sonarr/Radarr move files from torrents/ to media/
 step "Creating directory structure"
@@ -68,7 +83,7 @@ mkdir -p "$MEDIA_ROOT"/config/{plex,transmission,prowlarr,sonarr,radarr}
 mkdir -p "$MEDIA_ROOT"/data/torrents/{movies,tv,music,watch}
 mkdir -p "$MEDIA_ROOT"/data/media/{movies,tv,music}
 
-# ── 5. Copy runtime files to MEDIA_ROOT ──────────────────────
+# ── 6. Copy runtime files to MEDIA_ROOT ──────────────────────
 step "Deploying runtime files to $MEDIA_ROOT"
 RUNTIME_FILES=(docker-compose.yml docker-compose.vpn.yml docker-compose.novpn.yml transmission-settings.json)
 if [ "$SCRIPT_DIR" != "$MEDIA_ROOT" ]; then
@@ -80,7 +95,7 @@ else
     echo "Repo is the runtime directory — no copy needed."
 fi
 
-# ── 5b. Write .env (PUID, PGID, TZ) ─────────────────────────
+# ── 6b. Write .env (PUID, PGID, TZ) ─────────────────────────
 step "Configuring .env"
 ENV_FILE="$MEDIA_ROOT/.env"
 # Preserve existing VPN keys if present
@@ -98,7 +113,7 @@ if [ -n "$EXISTING_VPN" ]; then
 fi
 echo "Wrote PUID=$(id -u), PGID=$(id -g), TZ=$TZ to .env"
 
-# ── 5c. Optional VPN setup (Mullvad WireGuard) ───────────────
+# ── 6c. Optional VPN setup (Mullvad WireGuard) ───────────────
 step "VPN setup (optional)"
 USE_VPN=false
 if grep -q 'WIREGUARD_PRIVATE_KEY=.' "$ENV_FILE" 2>/dev/null; then
@@ -138,7 +153,7 @@ else
     fi
 fi
 
-# ── 6. Plex claim token ───────────────────────────────────────
+# ── 7. Plex claim token ───────────────────────────────────────
 step "Plex claim token"
 PLEX_PREFS="$MEDIA_ROOT/config/plex/Library/Application Support/Plex Media Server/Preferences.xml"
 if [ -f "$PLEX_PREFS" ] && grep -q 'PlexOnlineToken' "$PLEX_PREFS"; then
@@ -160,7 +175,7 @@ else
     fi
 fi
 
-# ── 7. Power management ───────────────────────────────────────
+# ── 8. Power management ───────────────────────────────────────
 # Goal: machine never sleeps (it's a server), display off when idle,
 # wake on LAN for remote access, survive lid closed.
 step "Configuring power management (requires sudo)"
@@ -172,13 +187,13 @@ sudo pmset -a powernap 0         # no DarkWake maintenance cycles
 sudo pmset -a hibernatemode 0    # no hibernate to disk
 echo "Power settings applied. Verify with: pmset -g"
 
-# ── 8. Disable Spotlight on data ──────────────────────────────
+# ── 9. Disable Spotlight on data ──────────────────────────────
 step "Disabling Spotlight indexing on data directory"
 # mdutil only works on volumes, so use .metadata_never_index marker instead
 touch "$MEDIA_ROOT/data/.metadata_never_index" 2>/dev/null || true
 echo "Spotlight indexing disabled for data directory."
 
-# ── 9. LaunchAgent for auto-start ─────────────────────────────
+# ── 10. LaunchAgent for auto-start ────────────────────────────
 step "Installing LaunchAgent for Colima auto-start"
 LAUNCH_DIR="$HOME/Library/LaunchAgents"
 mkdir -p "$LAUNCH_DIR"
@@ -186,12 +201,16 @@ mkdir -p "$LAUNCH_DIR"
 COLIMA_PATH="$(which colima)"
 PLIST_DST="$LAUNCH_DIR/com.user.colima.plist"
 
-sed "s|/opt/local/bin/colima|$COLIMA_PATH|g" "$SCRIPT_DIR/com.user.colima.plist" > "$PLIST_DST"
+sed -e "s|/opt/local/bin/colima|$COLIMA_PATH|g" \
+    -e "s|<string>2</string><!-- cpu -->|<string>$COLIMA_CPU</string><!-- cpu -->|" \
+    -e "s|<string>2</string><!-- mem -->|<string>$COLIMA_MEM</string><!-- mem -->|" \
+    -e "s|<string>60</string><!-- disk -->|<string>$COLIMA_DISK</string><!-- disk -->|" \
+    "$SCRIPT_DIR/com.user.colima.plist" > "$PLIST_DST"
 launchctl unload "$PLIST_DST" 2>/dev/null || true
 launchctl load "$PLIST_DST"
 echo "LaunchAgent installed."
 
-# ── 10. Pre-configure Transmission and start containers ──────
+# ── 11. Pre-configure Transmission and start containers ──────
 step "Pulling and starting containers"
 cd "$MEDIA_ROOT"
 
@@ -211,7 +230,7 @@ fi
 $COMPOSE_CMD pull
 $COMPOSE_CMD up -d
 
-# ── 11. Configure *arr stack via API ──────────────────────────
+# ── 12. Configure *arr stack via API ──────────────────────────
 step "Configuring *arr stack connections"
 
 # Helper: wait for an app to respond, read its API key
@@ -406,7 +425,7 @@ else
     echo "  Plex not claimed yet — add Plex notification manually in Sonarr/Radarr Settings → Connect."
 fi
 
-# ── 12. Summary ────────────────────────────────────────────────
+# ── 13. Summary ────────────────────────────────────────────────
 step "Done! Your media server is running."
 LOCAL_IP=$(ipconfig getifaddr en0 2>/dev/null || echo "<your-ip>")
 MAC_ADDR=$(ifconfig en0 2>/dev/null | awk '/ether/{print $2}' || echo "<unknown>")

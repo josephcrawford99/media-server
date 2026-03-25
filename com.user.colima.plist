@@ -10,11 +10,11 @@
         <string>/opt/local/bin/colima</string>
         <string>start</string>
         <string>--cpu</string>
-        <string>2</string>
+        <string>2</string><!-- cpu -->
         <string>--memory</string>
-        <string>2</string>
+        <string>2</string><!-- mem -->
         <string>--disk</string>
-        <string>60</string>
+        <string>60</string><!-- disk -->
         <string>--mount-type</string>
         <string>virtiofs</string>
     </array>
