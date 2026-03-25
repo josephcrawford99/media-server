@@ -3,7 +3,7 @@
 
 export PATH=/opt/local/bin:$PATH
 export DOCKER_HOST="unix://${HOME}/.colima/default/docker.sock"
-MEDIA_ROOT="$HOME/media-server"
+MEDIA_ROOT="${1:-$HOME/media-server}"
 
 bold=$(tput bold); dim=$(tput setaf 8); reset=$(tput sgr0)
 

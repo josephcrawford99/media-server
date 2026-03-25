@@ -4,9 +4,9 @@ services:
     container_name: plex
     network_mode: host
     environment:
-      - PUID=501
-      - PGID=20
-      - TZ=America/New_York
+      - PUID=${PUID:-501}
+      - PGID=${PGID:-20}
+      - TZ=${TZ:-America/New_York}
       - VERSION=docker
       - PLEX_CLAIM=${PLEX_CLAIM:-}
     volumes:
@@ -18,9 +18,9 @@ services:
     image: linuxserver/transmission:latest
     container_name: transmission
     environment:
-      - PUID=501
-      - PGID=20
-      - TZ=America/New_York
+      - PUID=${PUID:-501}
+      - PGID=${PGID:-20}
+      - TZ=${TZ:-America/New_York}
     volumes:
       - ./config/transmission:/config
       - ./data/torrents:/data/torrents
@@ -31,9 +31,9 @@ services:
     image: linuxserver/prowlarr:latest
     container_name: prowlarr
     environment:
-      - PUID=501
-      - PGID=20
-      - TZ=America/New_York
+      - PUID=${PUID:-501}
+      - PGID=${PGID:-20}
+      - TZ=${TZ:-America/New_York}
     volumes:
       - ./config/prowlarr:/config
       - ./data/torrents:/data/torrents
@@ -45,9 +45,9 @@ services:
     image: linuxserver/sonarr:latest
     container_name: sonarr
     environment:
-      - PUID=501
-      - PGID=20
-      - TZ=America/New_York
+      - PUID=${PUID:-501}
+      - PGID=${PGID:-20}
+      - TZ=${TZ:-America/New_York}
     volumes:
       - ./config/sonarr:/config
       - ./data:/data
@@ -59,9 +59,9 @@ services:
     image: linuxserver/radarr:latest
     container_name: radarr
     environment:
-      - PUID=501
-      - PGID=20
-      - TZ=America/New_York
+      - PUID=${PUID:-501}
+      - PGID=${PGID:-20}
+      - TZ=${TZ:-America/New_York}
     volumes:
       - ./config/radarr:/config
       - ./data:/data
@@ -73,7 +73,7 @@ services:
     image: ghcr.io/flaresolverr/flaresolverr:latest
     container_name: flaresolverr
     environment:
-      - TZ=America/New_York
+      - TZ=${TZ:-America/New_York}
       - LOG_LEVEL=info
     ports:
       - "8191:8191"

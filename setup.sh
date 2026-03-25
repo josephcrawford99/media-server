@@ -2,11 +2,12 @@
 set -euo pipefail
 
 # ── Configuration ──────────────────────────────────────────────
-COLIMA_CPU=2
-COLIMA_MEM=2
+COLIMA_CPU=6
+COLIMA_MEM=12
 COLIMA_DISK=60
-MEDIA_ROOT="$HOME/media-server"
+MEDIA_ROOT="${1:-$HOME/media-server}"
 TZ="America/New_York"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 bold=$(tput bold); reset=$(tput sgr0)
 step() { echo; echo "${bold}▸ $1${reset}"; }
@@ -67,27 +68,40 @@ mkdir -p "$MEDIA_ROOT"/config/{plex,transmission,prowlarr,sonarr,radarr}
 mkdir -p "$MEDIA_ROOT"/data/torrents/{movies,tv,music,watch}
 mkdir -p "$MEDIA_ROOT"/data/media/{movies,tv,music}
 
-# ── 5. Copy and patch docker-compose.yml ──────────────────────
-step "Setting up docker-compose.yml"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# ── 5. Copy runtime files to MEDIA_ROOT ──────────────────────
+step "Deploying runtime files to $MEDIA_ROOT"
+RUNTIME_FILES=(docker-compose.yml docker-compose.vpn.yml docker-compose.novpn.yml transmission-settings.json)
 if [ "$SCRIPT_DIR" != "$MEDIA_ROOT" ]; then
-    cp "$SCRIPT_DIR/docker-compose.yml" "$MEDIA_ROOT/docker-compose.yml"
+    for f in "${RUNTIME_FILES[@]}"; do
+        cp "$SCRIPT_DIR/$f" "$MEDIA_ROOT/$f"
+    done
+    echo "Copied compose and config files to $MEDIA_ROOT"
+else
+    echo "Repo is the runtime directory — no copy needed."
 fi
 
-CURRENT_UID=$(id -u)
-CURRENT_GID=$(id -g)
-if [ "$CURRENT_UID" != "501" ] || [ "$CURRENT_GID" != "20" ]; then
-    echo "Patching PUID=$CURRENT_UID, PGID=$CURRENT_GID"
-    sed -i '' "s/PUID=501/PUID=$CURRENT_UID/g" "$MEDIA_ROOT/docker-compose.yml"
-    sed -i '' "s/PGID=20/PGID=$CURRENT_GID/g" "$MEDIA_ROOT/docker-compose.yml"
-fi
-sed -i '' "s|TZ=America/New_York|TZ=$TZ|g" "$MEDIA_ROOT/docker-compose.yml"
-
-# ── 5b. Optional VPN setup (Mullvad WireGuard) ───────────────
-step "VPN setup (optional)"
+# ── 5b. Write .env (PUID, PGID, TZ) ─────────────────────────
+step "Configuring .env"
 ENV_FILE="$MEDIA_ROOT/.env"
+# Preserve existing VPN keys if present
+EXISTING_VPN=""
+if [ -f "$ENV_FILE" ]; then
+    EXISTING_VPN=$(grep -E '^WIREGUARD_' "$ENV_FILE" 2>/dev/null || true)
+fi
+cat > "$ENV_FILE" <<EOF
+PUID=$(id -u)
+PGID=$(id -g)
+TZ=$TZ
+EOF
+if [ -n "$EXISTING_VPN" ]; then
+    echo "$EXISTING_VPN" >> "$ENV_FILE"
+fi
+echo "Wrote PUID=$(id -u), PGID=$(id -g), TZ=$TZ to .env"
+
+# ── 5c. Optional VPN setup (Mullvad WireGuard) ───────────────
+step "VPN setup (optional)"
 USE_VPN=false
-if [ -f "$ENV_FILE" ] && grep -q 'WIREGUARD_PRIVATE_KEY=.' "$ENV_FILE"; then
+if grep -q 'WIREGUARD_PRIVATE_KEY=.' "$ENV_FILE" 2>/dev/null; then
     echo "Mullvad VPN already configured."
     USE_VPN=true
 else
@@ -110,7 +124,7 @@ else
             if echo "$RESPONSE" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+'; then
                 # Mullvad returns IPv4,IPv6 — gluetun only supports IPv4
                 WG_ADDRESS=$(echo "$RESPONSE" | cut -d',' -f1)
-                echo "WIREGUARD_PRIVATE_KEY=$PRIVKEY" > "$ENV_FILE"
+                echo "WIREGUARD_PRIVATE_KEY=$PRIVKEY" >> "$ENV_FILE"
                 echo "WIREGUARD_ADDRESSES=$WG_ADDRESS" >> "$ENV_FILE"
                 echo "VPN configured. Address: $WG_ADDRESS"
                 USE_VPN=true
