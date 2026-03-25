@@ -52,6 +52,10 @@ echo "Allocating ${COLIMA_CPU} CPUs, ${COLIMA_MEM}GB RAM, ${COLIMA_DISK}GB disk.
 
 # ── 4. Start Colima ──────────────────────────────────────────
 step "Starting Colima"
+if colima status &>/dev/null; then
+    echo "Colima is already running. Restarting with new resource settings..."
+    colima stop
+fi
 colima start \
     --cpu "$COLIMA_CPU" \
     --memory "$COLIMA_MEM" \
