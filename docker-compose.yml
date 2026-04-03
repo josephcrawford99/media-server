@@ -12,6 +12,13 @@ services:
     volumes:
       - ./config/plex:/config
       - ./data/media:/data/media
+    labels:
+      dashboard.enabled: "true"
+      dashboard.name: "Plex"
+      dashboard.port: "32400"
+      dashboard.path: "/web"
+      dashboard.color: "#e5a00d"
+      dashboard.external: "true"
     restart: unless-stopped
 
   transmission:
@@ -25,6 +32,11 @@ services:
       - ./config/transmission:/config
       - ./data/torrents:/data/torrents
       - ./data/torrents/watch:/watch
+    labels:
+      dashboard.enabled: "true"
+      dashboard.name: "Transmission"
+      dashboard.port: "9091"
+      dashboard.color: "#b71c1c"
     restart: unless-stopped
 
   prowlarr:
@@ -39,6 +51,11 @@ services:
       - ./data/torrents:/data/torrents
     ports:
       - "9696:9696"
+    labels:
+      dashboard.enabled: "true"
+      dashboard.name: "Prowlarr"
+      dashboard.port: "9696"
+      dashboard.color: "#7b5ea7"
     restart: unless-stopped
 
   sonarr:
@@ -53,6 +70,11 @@ services:
       - ./data:/data
     ports:
       - "8989:8989"
+    labels:
+      dashboard.enabled: "true"
+      dashboard.name: "Sonarr"
+      dashboard.port: "8989"
+      dashboard.color: "#35c5f4"
     restart: unless-stopped
 
   radarr:
@@ -67,13 +89,20 @@ services:
       - ./data:/data
     ports:
       - "7878:7878"
+    labels:
+      dashboard.enabled: "true"
+      dashboard.name: "Radarr"
+      dashboard.port: "7878"
+      dashboard.color: "#ffc230"
     restart: unless-stopped
 
   dashboard:
-    image: nginx:alpine
+    image: python:3-alpine
     container_name: dashboard
+    command: python /app/server.py
     volumes:
-      - ./dashboard:/usr/share/nginx/html:ro
+      - ./dashboard:/app:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     ports:
       - "80:80"
     restart: unless-stopped
@@ -86,4 +115,9 @@ services:
       - LOG_LEVEL=info
     ports:
       - "8191:8191"
+    labels:
+      dashboard.enabled: "true"
+      dashboard.name: "FlareSolverr"
+      dashboard.port: "8191"
+      dashboard.color: "#444"
     restart: unless-stopped
