@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# ── Configuration ──────────────────────────────────────────────
+# ── Configuration ─────────────────────────────────────────────
 MEDIA_ROOT="${1:-$HOME/media-server}"
 TZ="America/New_York"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -9,7 +9,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 bold=$(tput bold); reset=$(tput sgr0)
 step() { echo; echo "${bold}▸ $1${reset}"; }
 
-# ── 1. Prerequisites ──────────────────────────────────────────
+# ── Prerequisites ─────────────────────────────────────────────
 step "Checking prerequisites"
 
 if ! xcode-select -p &>/dev/null; then
@@ -28,11 +28,11 @@ if ! command -v port &>/dev/null; then
 fi
 echo "MacPorts: OK"
 
-# ── 2. Install packages ───────────────────────────────────────
+# ── Install packages ──────────────────────────────────────────
 step "Installing colima, docker, docker-compose-plugin via MacPorts"
 sudo port install colima docker docker-compose-plugin
 
-# ── 3. Colima resource allocation ────────────────────────────
+# ── Colima VM ─────────────────────────────────────────────────
 step "Colima VM resource allocation"
 TOTAL_CPU=$(sysctl -n hw.ncpu)
 TOTAL_MEM=$(( $(sysctl -n hw.memsize) / 1073741824 ))  # bytes → GB
@@ -50,7 +50,6 @@ read -rp "Disk (GB) for Colima VM [60]: " COLIMA_DISK
 COLIMA_DISK="${COLIMA_DISK:-60}"
 echo "Allocating ${COLIMA_CPU} CPUs, ${COLIMA_MEM}GB RAM, ${COLIMA_DISK}GB disk."
 
-# ── 4. Start Colima ──────────────────────────────────────────
 step "Starting Colima"
 if colima status &>/dev/null; then
     echo "Colima is already running. Restarting with new resource settings..."
@@ -73,9 +72,7 @@ colima start \
     --mount-type "$COLIMA_MOUNT" \
     "${COLIMA_VM_TYPE[@]}"
 
-# Ensure Docker CLI can reach Colima's socket
 export DOCKER_HOST="unix://${HOME}/.colima/default/docker.sock"
-
 docker info >/dev/null 2>&1 || { echo "ERROR: Docker not responding"; exit 1; }
 echo "Docker is running via Colima."
 
@@ -90,7 +87,7 @@ else
     echo "Added DOCKER_HOST to .zshrc"
 fi
 
-# ── 5. Create directories ─────────────────────────────────────
+# ── Directories ───────────────────────────────────────────────
 # TRaSH Guides pattern: single /data root enables hardlinks
 # when Sonarr/Radarr move files from torrents/ to media/
 step "Creating directory structure"
@@ -98,7 +95,7 @@ mkdir -p "$MEDIA_ROOT"/config/{plex,transmission,prowlarr,sonarr,radarr}
 mkdir -p "$MEDIA_ROOT"/data/torrents/{movies,tv,music,watch}
 mkdir -p "$MEDIA_ROOT"/data/media/{movies,tv,music}
 
-# ── 6. Copy runtime files to MEDIA_ROOT ──────────────────────
+# ── Deploy runtime files ──────────────────────────────────────
 step "Deploying runtime files to $MEDIA_ROOT"
 RUNTIME_FILES=(docker-compose.yml docker-compose.vpn.yml docker-compose.novpn.yml transmission-settings.json)
 if [ "$SCRIPT_DIR" != "$MEDIA_ROOT" ]; then
@@ -111,10 +108,9 @@ else
     echo "Repo is the runtime directory — no copy needed."
 fi
 
-# ── 6b. Write .env (PUID, PGID, TZ) ─────────────────────────
+# ── Environment (.env) ────────────────────────────────────────
 step "Configuring .env"
 ENV_FILE="$MEDIA_ROOT/.env"
-# Preserve existing VPN keys if present
 EXISTING_VPN=""
 if [ -f "$ENV_FILE" ]; then
     EXISTING_VPN=$(grep -E '^WIREGUARD_' "$ENV_FILE" 2>/dev/null || true)
@@ -129,7 +125,7 @@ if [ -n "$EXISTING_VPN" ]; then
 fi
 echo "Wrote PUID=$(id -u), PGID=$(id -g), TZ=$TZ to .env"
 
-# ── 6c. Optional VPN setup (Mullvad WireGuard) ───────────────
+# ── VPN setup (optional) ─────────────────────────────────────
 step "VPN setup (optional)"
 USE_VPN=false
 if grep -q 'WIREGUARD_PRIVATE_KEY=.' "$ENV_FILE" 2>/dev/null; then
@@ -138,7 +134,6 @@ if grep -q 'WIREGUARD_PRIVATE_KEY=.' "$ENV_FILE" 2>/dev/null; then
 else
     read -rp "Set up Mullvad VPN for Transmission? (y/N): " VPN_CHOICE
     if [ "$VPN_CHOICE" = "y" ] || [ "$VPN_CHOICE" = "Y" ]; then
-        # Install wireguard-tools if not present
         if ! command -v wg &>/dev/null; then
             echo "Installing wireguard-tools..."
             sudo port install wireguard-tools
@@ -153,7 +148,6 @@ else
                 -d account="$MULLVAD_ACCOUNT" \
                 -d pubkey="$PUBKEY")
             if echo "$RESPONSE" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+'; then
-                # Mullvad returns IPv4,IPv6 — gluetun only supports IPv4
                 WG_ADDRESS=$(echo "$RESPONSE" | cut -d',' -f1)
                 echo "WIREGUARD_PRIVATE_KEY=$PRIVKEY" >> "$ENV_FILE"
                 echo "WIREGUARD_ADDRESSES=$WG_ADDRESS" >> "$ENV_FILE"
@@ -169,7 +163,7 @@ else
     fi
 fi
 
-# ── 7. Plex claim token ───────────────────────────────────────
+# ── Plex claim token ─────────────────────────────────────────
 step "Plex claim token"
 PLEX_PREFS="$MEDIA_ROOT/config/plex/Library/Application Support/Plex Media Server/Preferences.xml"
 if [ -f "$PLEX_PREFS" ] && grep -q 'PlexOnlineToken' "$PLEX_PREFS"; then
@@ -191,9 +185,7 @@ else
     fi
 fi
 
-# ── 8. Power management ───────────────────────────────────────
-# Goal: machine never sleeps (it's a server), display off when idle,
-# wake on LAN for remote access, survive lid closed.
+# ── Power management ─────────────────────────────────────────
 step "Configuring power management (requires sudo)"
 sudo pmset -a disablesleep 1     # never sleep, even with lid closed
 sudo pmset -a displaysleep 2     # turn off display after 2 min
@@ -201,44 +193,14 @@ sudo pmset -a womp 1             # wake on LAN (magic packet)
 sudo pmset -a tcpkeepalive 1     # maintain network connections
 sudo pmset -a powernap 0         # no DarkWake maintenance cycles
 sudo pmset -a hibernatemode 0    # no hibernate to disk
-echo "Power settings applied. Verify with: pmset -g"
+echo "Power settings applied."
 
-# ── 9. Tailscale (remote access) ─────────────────────────────
-step "Setting up Tailscale for remote access"
-if command -v tailscale &>/dev/null; then
-    echo "Tailscale already installed."
-else
-    echo "Installing Tailscale via MacPorts..."
-    sudo port install tailscale
-fi
-# Enable and start the tailscaled daemon (MacPorts LaunchDaemon)
-if ! pgrep -x tailscaled &>/dev/null; then
-    echo "Starting tailscaled daemon..."
-    sudo port load tailscale
-    sleep 2
-fi
-# Check if already authenticated
-if tailscale status &>/dev/null; then
-    TS_IP=$(tailscale ip -4 2>/dev/null || true)
-    echo "Tailscale is connected. IP: $TS_IP"
-else
-    echo ""
-    echo "Tailscale needs to be authenticated."
-    echo "Running 'tailscale up' — follow the URL below to sign in:"
-    echo ""
-    sudo tailscale up
-    echo ""
-    TS_IP=$(tailscale ip -4 2>/dev/null || true)
-    echo "Tailscale connected. IP: $TS_IP"
-fi
-
-# ── 10. Disable Spotlight on data ────────────────────────────
+# ── Spotlight ─────────────────────────────────────────────────
 step "Disabling Spotlight indexing on data directory"
-# mdutil only works on volumes, so use .metadata_never_index marker instead
 touch "$MEDIA_ROOT/data/.metadata_never_index" 2>/dev/null || true
-echo "Spotlight indexing disabled for data directory."
+echo "Done."
 
-# ── 11. LaunchAgent for auto-start ───────────────────────────
+# ── LaunchAgent ───────────────────────────────────────────────
 step "Installing LaunchAgent for Colima auto-start"
 LAUNCH_DIR="$HOME/Library/LaunchAgents"
 mkdir -p "$LAUNCH_DIR"
@@ -255,11 +217,10 @@ launchctl unload "$PLIST_DST" 2>/dev/null || true
 launchctl load "$PLIST_DST"
 echo "LaunchAgent installed."
 
-# ── 12. Pre-configure Transmission and start containers ─────
+# ── Start containers ──────────────────────────────────────────
 step "Pulling and starting containers"
 cd "$MEDIA_ROOT"
 
-# Copy pre-configured Transmission settings before first start
 mkdir -p "$MEDIA_ROOT/config/transmission" "$MEDIA_ROOT/data/torrents/incomplete"
 if [ ! -f "$MEDIA_ROOT/config/transmission/settings.json" ]; then
     cp "$SCRIPT_DIR/transmission-settings.json" "$MEDIA_ROOT/config/transmission/settings.json"
@@ -275,15 +236,13 @@ fi
 $COMPOSE_CMD pull
 $COMPOSE_CMD up -d
 
-# ── 13. Configure *arr stack via API ─────────────────────────
+# ── Configure *arr stack ──────────────────────────────────────
 step "Configuring *arr stack connections"
 
-# Helper: wait for an app to respond, read its API key
 wait_and_get_key() {
     local name="$1" url="$2" config="$3"
     echo "Waiting for $name..."
     for i in $(seq 1 60); do
-        # Apps return various responses — just check for HTTP 200
         if curl -s -o /dev/null -w '%{http_code}' "$url/ping" 2>/dev/null | grep -q "200"; then
             echo "  $name is up."
             break
@@ -295,8 +254,6 @@ wait_and_get_key() {
     fi
 }
 
-# Helper: add Transmission as download client
-# When VPN is enabled, Transmission shares gluetun's network
 TRANSMISSION_HOST="transmission"
 if [ "$USE_VPN" = true ]; then
     TRANSMISSION_HOST="gluetun"
@@ -326,7 +283,6 @@ add_transmission() {
         || echo "  $name: Warning — add Transmission manually in UI."
 }
 
-# Helper: add root folder
 add_root_folder() {
     local name="$1" url="$2" key="$3" path="$4"
     curl -s -X POST "$url/api/v3/rootfolder" \
@@ -336,12 +292,10 @@ add_root_folder() {
         || echo "  $name: Warning — set root folder manually in UI."
 }
 
-# Get API keys for all apps
 PROWLARR_KEY=$(wait_and_get_key "Prowlarr" "http://localhost:9696" "$MEDIA_ROOT/config/prowlarr/config.xml")
 SONARR_KEY=$(wait_and_get_key "Sonarr" "http://localhost:8989" "$MEDIA_ROOT/config/sonarr/config.xml")
 RADARR_KEY=$(wait_and_get_key "Radarr" "http://localhost:7878" "$MEDIA_ROOT/config/radarr/config.xml")
 
-# Wait for FlareSolverr to be ready
 echo "Waiting for FlareSolverr..."
 for i in $(seq 1 30); do
     if curl -s -o /dev/null -w '%{http_code}' "http://localhost:8191" 2>/dev/null | grep -q "200\|405"; then
@@ -351,15 +305,12 @@ for i in $(seq 1 30); do
     sleep 3
 done
 
-# Create 'flaresolverr' tag and add FlareSolverr proxy in Prowlarr
-# Indexers tagged 'flaresolverr' will route through FlareSolverr to bypass Cloudflare
 if [ -n "$PROWLARR_KEY" ]; then
     FS_TAG_ID=$(curl -s -X POST "http://localhost:9696/api/v1/tag" \
         -H "X-Api-Key: $PROWLARR_KEY" \
         -H "Content-Type: application/json" \
         -d "{\"label\": \"flaresolverr\"}" 2>/dev/null | sed -n 's/.*"id":\([0-9]*\).*/\1/p')
     if [ -z "$FS_TAG_ID" ]; then
-        # Tag may already exist, fetch its id
         FS_TAG_ID=$(curl -s "http://localhost:9696/api/v1/tag" \
             -H "X-Api-Key: $PROWLARR_KEY" 2>/dev/null \
             | sed -n 's/.*"label":"flaresolverr".*"id":\([0-9]*\).*/\1/p; s/.*"id":\([0-9]*\).*"label":"flaresolverr".*/\1/p' | head -1)
@@ -384,7 +335,6 @@ if [ -n "$PROWLARR_KEY" ]; then
     echo "  Tip: Tag indexers with 'flaresolverr' to route them through FlareSolverr."
 fi
 
-# Add Transmission as download client in each app
 if [ -n "$PROWLARR_KEY" ]; then
     add_transmission "Prowlarr" "http://localhost:9696" "$PROWLARR_KEY" "" "v1"
 fi
@@ -397,7 +347,6 @@ if [ -n "$RADARR_KEY" ]; then
     add_root_folder "Radarr" "http://localhost:7878" "$RADARR_KEY" "/data/media/movies"
 fi
 
-# Connect Prowlarr → Sonarr and Radarr (sync indexers)
 if [ -n "$PROWLARR_KEY" ] && [ -n "$SONARR_KEY" ]; then
     curl -s -X POST "http://localhost:9696/api/v1/applications" \
         -H "X-Api-Key: $PROWLARR_KEY" \
@@ -433,7 +382,6 @@ if [ -n "$PROWLARR_KEY" ] && [ -n "$RADARR_KEY" ]; then
         || echo "  Prowlarr → Radarr: Warning — connect manually in Prowlarr UI."
 fi
 
-# Connect Sonarr/Radarr → Plex (library scan on import)
 PLEX_PREFS="$MEDIA_ROOT/config/plex/Library/Application Support/Plex Media Server/Preferences.xml"
 PLEX_TOKEN=""
 if [ -f "$PLEX_PREFS" ]; then
@@ -470,7 +418,8 @@ else
     echo "  Plex not claimed yet — add Plex notification manually in Sonarr/Radarr Settings → Connect."
 fi
 
-# ── 14. Health check ─────────────────────────────────────────
+# ── Health checks ─────────────────────────────────────────────
+# These never abort the script — failures are warnings only
 step "Running health checks"
 HEALTH_OK=true
 
@@ -490,11 +439,8 @@ check_http "Sonarr" "http://localhost:8989"
 check_http "Radarr" "http://localhost:7878"
 check_http "Prowlarr" "http://localhost:9696"
 check_http "FlareSolverr" "http://localhost:8191"
-
-# Transmission is behind gluetun when VPN is enabled — check port 9091 either way
 check_http "Transmission" "http://localhost:9091/transmission/web/"
 
-# Verify Sonarr can reach its download client
 if [ -n "$SONARR_KEY" ]; then
     SONARR_DL=$(curl -s "http://localhost:8989/api/v3/downloadclient" -H "X-Api-Key: $SONARR_KEY" 2>/dev/null || true)
     if echo "$SONARR_DL" | python3 -c "import sys,json;clients=json.load(sys.stdin);assert any(c.get('enable') for c in clients)" 2>/dev/null; then
@@ -505,7 +451,6 @@ if [ -n "$SONARR_KEY" ]; then
     fi
 fi
 
-# Verify Radarr can reach its download client
 if [ -n "$RADARR_KEY" ]; then
     RADARR_DL=$(curl -s "http://localhost:7878/api/v3/downloadclient" -H "X-Api-Key: $RADARR_KEY" 2>/dev/null || true)
     if echo "$RADARR_DL" | python3 -c "import sys,json;clients=json.load(sys.stdin);assert any(c.get('enable') for c in clients)" 2>/dev/null; then
@@ -516,7 +461,6 @@ if [ -n "$RADARR_KEY" ]; then
     fi
 fi
 
-# Verify Prowlarr has app sync configured
 if [ -n "$PROWLARR_KEY" ]; then
     PROWLARR_APPS=$(curl -s "http://localhost:9696/api/v1/applications" -H "X-Api-Key: $PROWLARR_KEY" 2>/dev/null || true)
     PROWLARR_APP_COUNT=$(echo "$PROWLARR_APPS" | python3 -c "import sys,json;print(len(json.load(sys.stdin)))" 2>/dev/null || echo "0")
@@ -528,24 +472,14 @@ if [ -n "$PROWLARR_KEY" ]; then
     fi
 fi
 
-# VPN check
 if [ "$USE_VPN" = true ]; then
-    VPN_IP=$(docker exec gluetun wget -qO- https://am.i.mullvad.net/ip 2>/dev/null)
+    VPN_IP=$(docker exec gluetun wget -qO- https://am.i.mullvad.net/ip 2>/dev/null || true)
     if [ -n "$VPN_IP" ]; then
         echo "  ✓ VPN active (IP: $VPN_IP)"
     else
         echo "  ✗ VPN not working — Transmission may be exposed"
         HEALTH_OK=false
     fi
-fi
-
-# Tailscale check
-if tailscale status &>/dev/null; then
-    TS_IP=$(tailscale ip -4 2>/dev/null || true)
-    echo "  ✓ Tailscale connected (IP: $TS_IP)"
-else
-    echo "  ✗ Tailscale not connected — remote access unavailable"
-    HEALTH_OK=false
 fi
 
 if [ "$HEALTH_OK" = true ]; then
@@ -556,7 +490,7 @@ else
     echo "  Some checks failed — review above."
 fi
 
-# ── 15. Summary ──────────────────────────────────────────────
+# ── Summary ───────────────────────────────────────────────────
 step "Done! Your media server is running."
 LOCAL_IP=$(ipconfig getifaddr en0 2>/dev/null || echo "<your-ip>")
 MAC_ADDR=$(ifconfig en0 2>/dev/null | awk '/ether/{print $2}' || echo "<unknown>")
@@ -564,10 +498,6 @@ MAC_ADDR=$(ifconfig en0 2>/dev/null | awk '/ether/{print $2}' || echo "<unknown>
 cat <<SUMMARY
 
   Dashboard:     http://${LOCAL_IP}/ (links to all services)
-
-  Remote access (Tailscale):
-    Install Tailscale on your devices: https://tailscale.com/download
-    All services available via Tailscale IP or hostname.
 
   Services:
     Plex:          http://${LOCAL_IP}:32400/web
@@ -609,4 +539,39 @@ cat <<SUMMARY
 
 SUMMARY
 
-pmset -g
+# ── Tailscale (optional remote access) ────────────────────────
+# Last step — everything above works on the local network already.
+# Tailscale lets you access all services from anywhere.
+step "Remote access via Tailscale (optional)"
+if command -v tailscale &>/dev/null && tailscale status &>/dev/null; then
+    TS_IP=$(tailscale ip -4 2>/dev/null || true)
+    echo "Tailscale is already connected. IP: $TS_IP"
+    echo "  Dashboard: http://${TS_IP}/"
+    echo "  All services are accessible remotely via Tailscale."
+else
+    read -rp "Set up Tailscale for remote access? (y/N): " TS_CHOICE
+    if [ "$TS_CHOICE" = "y" ] || [ "$TS_CHOICE" = "Y" ]; then
+        if ! command -v tailscale &>/dev/null; then
+            echo "Installing Tailscale via MacPorts..."
+            sudo port install tailscale
+        fi
+        if ! pgrep -x tailscaled &>/dev/null; then
+            echo "Starting tailscaled daemon..."
+            sudo port load tailscale
+            sleep 2
+        fi
+        echo ""
+        echo "Authenticating — follow the URL below to sign in:"
+        echo ""
+        sudo tailscale up
+        echo ""
+        TS_IP=$(tailscale ip -4 2>/dev/null || true)
+        echo "Tailscale connected! IP: $TS_IP"
+        echo "  Dashboard: http://${TS_IP}/"
+        echo ""
+        echo "  Install Tailscale on your other devices: https://tailscale.com/download"
+        echo "  Sign in with the same account for remote access to everything."
+    else
+        echo "Skipped. You can set up Tailscale later by re-running setup."
+    fi
+fi
