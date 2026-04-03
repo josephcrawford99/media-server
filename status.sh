@@ -7,7 +7,9 @@ MEDIA_ROOT="${1:-$HOME/media-server}"
 
 bold=$(tput bold); dim=$(tput setaf 8); reset=$(tput sgr0)
 
+LOCAL_IP=$(ipconfig getifaddr en0 2>/dev/null || echo "localhost")
 echo "${bold}── Media Server Status ──${reset}"
+echo "  Dashboard: http://${LOCAL_IP}/"
 echo ""
 
 # Colima

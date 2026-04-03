@@ -105,7 +105,8 @@ if [ "$SCRIPT_DIR" != "$MEDIA_ROOT" ]; then
     for f in "${RUNTIME_FILES[@]}"; do
         cp "$SCRIPT_DIR/$f" "$MEDIA_ROOT/$f"
     done
-    echo "Copied compose and config files to $MEDIA_ROOT"
+    cp -r "$SCRIPT_DIR/dashboard" "$MEDIA_ROOT/dashboard"
+    echo "Copied compose, config, and dashboard files to $MEDIA_ROOT"
 else
     echo "Repo is the runtime directory — no copy needed."
 fi
@@ -454,6 +455,7 @@ check_http() {
     fi
 }
 
+check_http "Dashboard" "http://localhost:80"
 check_http "Plex" "http://localhost:32400/web"
 check_http "Sonarr" "http://localhost:8989"
 check_http "Radarr" "http://localhost:7878"
@@ -522,6 +524,8 @@ LOCAL_IP=$(ipconfig getifaddr en0 2>/dev/null || echo "<your-ip>")
 MAC_ADDR=$(ifconfig en0 2>/dev/null | awk '/ether/{print $2}' || echo "<unknown>")
 
 cat <<SUMMARY
+
+  Dashboard:     http://${LOCAL_IP}/ (links to all services)
 
   Services:
     Plex:          http://${LOCAL_IP}:32400/web

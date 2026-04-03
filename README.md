@@ -22,6 +22,7 @@ Plex detects and streams to your devices
 
 | Service       | Port  | Role                            |
 |---------------|-------|---------------------------------|
+| Dashboard     | 80    | Landing page with links to all  |
 | Plex          | 32400 | Media streaming                 |
 | Sonarr        | 8989  | TV show management              |
 | Radarr        | 7878  | Movie management                |
@@ -81,6 +82,8 @@ Re-running `setup.sh` is safe — it restarts Colima with new resource settings,
 │       ├── movies/       ← Radarr root folder
 │       ├── tv/           ← Sonarr root folder
 │       └── music/
+├── dashboard/
+│   └── index.html        ← landing page (http://host/)
 ├── docker-compose.yml
 ├── docker-compose.vpn.yml
 ├── docker-compose.novpn.yml

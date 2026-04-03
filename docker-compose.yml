@@ -69,6 +69,15 @@ services:
       - "7878:7878"
     restart: unless-stopped
 
+  dashboard:
+    image: nginx:alpine
+    container_name: dashboard
+    volumes:
+      - ./dashboard:/usr/share/nginx/html:ro
+    ports:
+      - "80:80"
+    restart: unless-stopped
+
   flaresolverr:
     image: ghcr.io/flaresolverr/flaresolverr:latest
     container_name: flaresolverr
