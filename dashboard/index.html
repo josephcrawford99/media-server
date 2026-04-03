@@ -42,7 +42,7 @@
       border-radius: 12px;
       text-decoration: none;
       color: #fff;
-      transition: transform 0.15s, box-shadow 0.15s;
+      transition: transform 0.15s, box-shadow 0.15s, opacity 0.15s;
     }
     a.card:hover {
       transform: translateY(-4px);
@@ -57,49 +57,116 @@
       font-size: 0.85rem;
       opacity: 0.7;
     }
+    a.card .badge {
+      font-size: 0.7rem;
+      margin-top: 0.5rem;
+      padding: 0.15rem 0.5rem;
+      border-radius: 6px;
+      background: rgba(0,0,0,0.25);
+      display: none;
+    }
+    a.card.unavailable {
+      opacity: 0.35;
+      pointer-events: none;
+      cursor: default;
+    }
+    a.card.unavailable .badge {
+      display: inline-block;
+    }
+    a.card.unavailable:hover {
+      transform: none;
+      box-shadow: none;
+    }
     .plex       { background: #e5a00d; }
     .sonarr     { background: #35c5f4; }
     .radarr     { background: #ffc230; color: #1a1a2e; }
     .prowlarr   { background: #7b5ea7; }
     .transmission { background: #b71c1c; }
     .flaresolverr { background: #444; }
+    .notice {
+      margin-top: 2rem;
+      padding: 1rem 1.5rem;
+      background: rgba(255,255,255,0.05);
+      border-radius: 8px;
+      font-size: 0.85rem;
+      color: #999;
+      max-width: 800px;
+      text-align: center;
+      display: none;
+    }
+    .notice a { color: #7ecbff; }
   </style>
 </head>
 <body>
   <h1>Media Server</h1>
   <p class="subtitle">macbook-old</p>
   <div class="grid">
-    <a class="card plex" href="//:32400/web">
+    <a class="card plex" data-port="32400" data-path="/web" data-external>
       <span class="name">Plex</span>
       <span class="port">:32400</span>
+      <span class="badge">local only</span>
     </a>
-    <a class="card sonarr" href="//:8989">
+    <a class="card sonarr" data-port="8989">
       <span class="name">Sonarr</span>
       <span class="port">:8989</span>
+      <span class="badge">local only</span>
     </a>
-    <a class="card radarr" href="//:7878">
+    <a class="card radarr" data-port="7878">
       <span class="name">Radarr</span>
       <span class="port">:7878</span>
+      <span class="badge">local only</span>
     </a>
-    <a class="card prowlarr" href="//:9696">
+    <a class="card prowlarr" data-port="9696">
       <span class="name">Prowlarr</span>
       <span class="port">:9696</span>
+      <span class="badge">local only</span>
     </a>
-    <a class="card transmission" href="//:9091">
+    <a class="card transmission" data-port="9091">
       <span class="name">Transmission</span>
       <span class="port">:9091</span>
+      <span class="badge">local only</span>
     </a>
-    <a class="card flaresolverr" href="//:8191">
+    <a class="card flaresolverr" data-port="8191">
       <span class="name">FlareSolverr</span>
       <span class="port">:8191</span>
+      <span class="badge">local only</span>
     </a>
   </div>
+  <div class="notice" id="remote-notice">
+    Some services are only available on the local network.
+    Install <a href="https://tailscale.com/" target="_blank">Tailscale</a>
+    on this server and your devices for secure remote access to everything.
+  </div>
   <script>
-    // Resolve links relative to current hostname so they work regardless of
-    // whether you access via IP, macbook-old, or macbook-old.local
-    document.querySelectorAll('a.card').forEach(a => {
-      a.href = location.protocol + '//' + location.hostname + a.getAttribute('href').replace('//', '');
+    // Detect local network: private IPs, .local hostnames, common LAN names
+    function isLocal() {
+      var h = location.hostname;
+      if (h === 'localhost' || h === '127.0.0.1' || h === '::1') return true;
+      if (h.endsWith('.local')) return true;
+      // private IPv4 ranges
+      if (/^10\./.test(h)) return true;
+      if (/^192\.168\./.test(h)) return true;
+      if (/^172\.(1[6-9]|2\d|3[01])\./.test(h)) return true;
+      // bare hostnames with no dots are typically local (e.g. macbook-old)
+      if (h.indexOf('.') === -1) return true;
+      // Tailscale domains count as "local" (full access)
+      if (h.endsWith('.ts.net')) return true;
+      return false;
+    }
+
+    var local = isLocal();
+    document.querySelectorAll('a.card').forEach(function(a) {
+      var port = a.getAttribute('data-port');
+      var path = a.getAttribute('data-path') || '';
+      var external = a.hasAttribute('data-external');
+      a.href = location.protocol + '//' + location.hostname + ':' + port + path;
+      if (!local && !external) {
+        a.classList.add('unavailable');
+      }
     });
+    if (!local) {
+      document.getElementById('remote-notice').style.display = 'block';
+    }
   </script>
 </body>
 </html>
