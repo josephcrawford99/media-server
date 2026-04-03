@@ -219,7 +219,7 @@ if ! pgrep -x tailscaled &>/dev/null; then
 fi
 # Check if already authenticated
 if tailscale status &>/dev/null; then
-    TS_IP=$(tailscale ip -4 2>/dev/null)
+    TS_IP=$(tailscale ip -4 2>/dev/null || true)
     echo "Tailscale is connected. IP: $TS_IP"
 else
     echo ""
@@ -228,7 +228,7 @@ else
     echo ""
     sudo tailscale up
     echo ""
-    TS_IP=$(tailscale ip -4 2>/dev/null)
+    TS_IP=$(tailscale ip -4 2>/dev/null || true)
     echo "Tailscale connected. IP: $TS_IP"
 fi
 
@@ -496,7 +496,7 @@ check_http "Transmission" "http://localhost:9091/transmission/web/"
 
 # Verify Sonarr can reach its download client
 if [ -n "$SONARR_KEY" ]; then
-    SONARR_DL=$(curl -s "http://localhost:8989/api/v3/downloadclient" -H "X-Api-Key: $SONARR_KEY" 2>/dev/null)
+    SONARR_DL=$(curl -s "http://localhost:8989/api/v3/downloadclient" -H "X-Api-Key: $SONARR_KEY" 2>/dev/null || true)
     if echo "$SONARR_DL" | python3 -c "import sys,json;clients=json.load(sys.stdin);assert any(c.get('enable') for c in clients)" 2>/dev/null; then
         echo "  ✓ Sonarr → Transmission connected"
     else
@@ -507,7 +507,7 @@ fi
 
 # Verify Radarr can reach its download client
 if [ -n "$RADARR_KEY" ]; then
-    RADARR_DL=$(curl -s "http://localhost:7878/api/v3/downloadclient" -H "X-Api-Key: $RADARR_KEY" 2>/dev/null)
+    RADARR_DL=$(curl -s "http://localhost:7878/api/v3/downloadclient" -H "X-Api-Key: $RADARR_KEY" 2>/dev/null || true)
     if echo "$RADARR_DL" | python3 -c "import sys,json;clients=json.load(sys.stdin);assert any(c.get('enable') for c in clients)" 2>/dev/null; then
         echo "  ✓ Radarr → Transmission connected"
     else
@@ -518,8 +518,8 @@ fi
 
 # Verify Prowlarr has app sync configured
 if [ -n "$PROWLARR_KEY" ]; then
-    PROWLARR_APPS=$(curl -s "http://localhost:9696/api/v1/applications" -H "X-Api-Key: $PROWLARR_KEY" 2>/dev/null)
-    PROWLARR_APP_COUNT=$(echo "$PROWLARR_APPS" | python3 -c "import sys,json;print(len(json.load(sys.stdin)))" 2>/dev/null)
+    PROWLARR_APPS=$(curl -s "http://localhost:9696/api/v1/applications" -H "X-Api-Key: $PROWLARR_KEY" 2>/dev/null || true)
+    PROWLARR_APP_COUNT=$(echo "$PROWLARR_APPS" | python3 -c "import sys,json;print(len(json.load(sys.stdin)))" 2>/dev/null || echo "0")
     if [ "${PROWLARR_APP_COUNT:-0}" -ge 2 ]; then
         echo "  ✓ Prowlarr → Sonarr/Radarr sync configured ($PROWLARR_APP_COUNT apps)"
     else
@@ -541,7 +541,7 @@ fi
 
 # Tailscale check
 if tailscale status &>/dev/null; then
-    TS_IP=$(tailscale ip -4 2>/dev/null)
+    TS_IP=$(tailscale ip -4 2>/dev/null || true)
     echo "  ✓ Tailscale connected (IP: $TS_IP)"
 else
     echo "  ✗ Tailscale not connected — remote access unavailable"
