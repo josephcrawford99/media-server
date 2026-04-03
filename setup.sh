@@ -203,13 +203,42 @@ sudo pmset -a powernap 0         # no DarkWake maintenance cycles
 sudo pmset -a hibernatemode 0    # no hibernate to disk
 echo "Power settings applied. Verify with: pmset -g"
 
-# ── 9. Disable Spotlight on data ──────────────────────────────
+# ── 9. Tailscale (remote access) ─────────────────────────────
+step "Setting up Tailscale for remote access"
+if command -v tailscale &>/dev/null; then
+    echo "Tailscale already installed."
+else
+    echo "Installing Tailscale via MacPorts..."
+    sudo port install tailscale
+fi
+# Enable and start the tailscaled daemon (MacPorts LaunchDaemon)
+if ! pgrep -x tailscaled &>/dev/null; then
+    echo "Starting tailscaled daemon..."
+    sudo port load tailscale
+    sleep 2
+fi
+# Check if already authenticated
+if tailscale status &>/dev/null; then
+    TS_IP=$(tailscale ip -4 2>/dev/null)
+    echo "Tailscale is connected. IP: $TS_IP"
+else
+    echo ""
+    echo "Tailscale needs to be authenticated."
+    echo "Running 'tailscale up' — follow the URL below to sign in:"
+    echo ""
+    sudo tailscale up
+    echo ""
+    TS_IP=$(tailscale ip -4 2>/dev/null)
+    echo "Tailscale connected. IP: $TS_IP"
+fi
+
+# ── 10. Disable Spotlight on data ────────────────────────────
 step "Disabling Spotlight indexing on data directory"
 # mdutil only works on volumes, so use .metadata_never_index marker instead
 touch "$MEDIA_ROOT/data/.metadata_never_index" 2>/dev/null || true
 echo "Spotlight indexing disabled for data directory."
 
-# ── 10. LaunchAgent for auto-start ────────────────────────────
+# ── 11. LaunchAgent for auto-start ───────────────────────────
 step "Installing LaunchAgent for Colima auto-start"
 LAUNCH_DIR="$HOME/Library/LaunchAgents"
 mkdir -p "$LAUNCH_DIR"
@@ -226,7 +255,7 @@ launchctl unload "$PLIST_DST" 2>/dev/null || true
 launchctl load "$PLIST_DST"
 echo "LaunchAgent installed."
 
-# ── 11. Pre-configure Transmission and start containers ──────
+# ── 12. Pre-configure Transmission and start containers ─────
 step "Pulling and starting containers"
 cd "$MEDIA_ROOT"
 
@@ -246,7 +275,7 @@ fi
 $COMPOSE_CMD pull
 $COMPOSE_CMD up -d
 
-# ── 12. Configure *arr stack via API ──────────────────────────
+# ── 13. Configure *arr stack via API ─────────────────────────
 step "Configuring *arr stack connections"
 
 # Helper: wait for an app to respond, read its API key
@@ -441,7 +470,7 @@ else
     echo "  Plex not claimed yet — add Plex notification manually in Sonarr/Radarr Settings → Connect."
 fi
 
-# ── 13. Health check ──────────────────────────────────────────
+# ── 14. Health check ─────────────────────────────────────────
 step "Running health checks"
 HEALTH_OK=true
 
@@ -510,6 +539,15 @@ if [ "$USE_VPN" = true ]; then
     fi
 fi
 
+# Tailscale check
+if tailscale status &>/dev/null; then
+    TS_IP=$(tailscale ip -4 2>/dev/null)
+    echo "  ✓ Tailscale connected (IP: $TS_IP)"
+else
+    echo "  ✗ Tailscale not connected — remote access unavailable"
+    HEALTH_OK=false
+fi
+
 if [ "$HEALTH_OK" = true ]; then
     echo ""
     echo "  All checks passed."
@@ -518,7 +556,7 @@ else
     echo "  Some checks failed — review above."
 fi
 
-# ── 14. Summary ────────────────────────────────────────────────
+# ── 15. Summary ──────────────────────────────────────────────
 step "Done! Your media server is running."
 LOCAL_IP=$(ipconfig getifaddr en0 2>/dev/null || echo "<your-ip>")
 MAC_ADDR=$(ifconfig en0 2>/dev/null | awk '/ether/{print $2}' || echo "<unknown>")
@@ -526,6 +564,10 @@ MAC_ADDR=$(ifconfig en0 2>/dev/null | awk '/ether/{print $2}' || echo "<unknown>
 cat <<SUMMARY
 
   Dashboard:     http://${LOCAL_IP}/ (links to all services)
+
+  Remote access (Tailscale):
+    Install Tailscale on your devices: https://tailscale.com/download
+    All services available via Tailscale IP or hostname.
 
   Services:
     Plex:          http://${LOCAL_IP}:32400/web

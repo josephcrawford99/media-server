@@ -10,6 +10,10 @@ bold=$(tput bold); dim=$(tput setaf 8); reset=$(tput sgr0)
 LOCAL_IP=$(ipconfig getifaddr en0 2>/dev/null || echo "localhost")
 echo "${bold}── Media Server Status ──${reset}"
 echo "  Dashboard: http://${LOCAL_IP}/"
+TS_IP=$(tailscale ip -4 2>/dev/null)
+if [ -n "$TS_IP" ]; then
+    echo "  Tailscale: http://${TS_IP}/"
+fi
 echo ""
 
 # Colima
