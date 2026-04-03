@@ -441,45 +441,42 @@ check_http "Prowlarr" "http://localhost:9696"
 check_http "FlareSolverr" "http://localhost:8191"
 check_http "Transmission" "http://localhost:9091/transmission/web/"
 
+# API checks with retries — apps may still be committing config
+check_api() {
+    local label="$1" check_cmd="$2" fail_msg="$3"
+    for attempt in 1 2 3; do
+        if eval "$check_cmd" 2>/dev/null; then
+            echo "  ✓ $label"
+            return 0
+        fi
+        [ "$attempt" -lt 3 ] && sleep 3
+    done
+    echo "  ✗ $fail_msg"
+    HEALTH_OK=false
+}
+
 if [ -n "$SONARR_KEY" ]; then
-    SONARR_DL=$(curl -s "http://localhost:8989/api/v3/downloadclient" -H "X-Api-Key: $SONARR_KEY" 2>/dev/null || true)
-    if echo "$SONARR_DL" | python3 -c "import sys,json;clients=json.load(sys.stdin);assert any(c.get('enable') for c in clients)" 2>/dev/null; then
-        echo "  ✓ Sonarr → Transmission connected"
-    else
-        echo "  ✗ Sonarr has no active download client"
-        HEALTH_OK=false
-    fi
+    check_api "Sonarr → Transmission connected" \
+        "curl -s 'http://localhost:8989/api/v3/downloadclient' -H 'X-Api-Key: $SONARR_KEY' | python3 -c \"import sys,json;clients=json.load(sys.stdin);assert any(c.get('enable') for c in clients)\"" \
+        "Sonarr has no active download client"
 fi
 
 if [ -n "$RADARR_KEY" ]; then
-    RADARR_DL=$(curl -s "http://localhost:7878/api/v3/downloadclient" -H "X-Api-Key: $RADARR_KEY" 2>/dev/null || true)
-    if echo "$RADARR_DL" | python3 -c "import sys,json;clients=json.load(sys.stdin);assert any(c.get('enable') for c in clients)" 2>/dev/null; then
-        echo "  ✓ Radarr → Transmission connected"
-    else
-        echo "  ✗ Radarr has no active download client"
-        HEALTH_OK=false
-    fi
+    check_api "Radarr → Transmission connected" \
+        "curl -s 'http://localhost:7878/api/v3/downloadclient' -H 'X-Api-Key: $RADARR_KEY' | python3 -c \"import sys,json;clients=json.load(sys.stdin);assert any(c.get('enable') for c in clients)\"" \
+        "Radarr has no active download client"
 fi
 
 if [ -n "$PROWLARR_KEY" ]; then
-    PROWLARR_APPS=$(curl -s "http://localhost:9696/api/v1/applications" -H "X-Api-Key: $PROWLARR_KEY" 2>/dev/null || true)
-    PROWLARR_APP_COUNT=$(echo "$PROWLARR_APPS" | python3 -c "import sys,json;print(len(json.load(sys.stdin)))" 2>/dev/null || echo "0")
-    if [ "${PROWLARR_APP_COUNT:-0}" -ge 2 ]; then
-        echo "  ✓ Prowlarr → Sonarr/Radarr sync configured ($PROWLARR_APP_COUNT apps)"
-    else
-        echo "  ✗ Prowlarr app sync missing (found ${PROWLARR_APP_COUNT:-0}, expected 2+)"
-        HEALTH_OK=false
-    fi
+    check_api "Prowlarr → Sonarr/Radarr sync configured" \
+        "[ \$(curl -s 'http://localhost:9696/api/v1/applications' -H 'X-Api-Key: $PROWLARR_KEY' | python3 -c 'import sys,json;print(len(json.load(sys.stdin)))') -ge 2 ]" \
+        "Prowlarr app sync missing (expected 2+ apps)"
 fi
 
 if [ "$USE_VPN" = true ]; then
-    VPN_IP=$(docker exec gluetun wget -qO- https://am.i.mullvad.net/ip 2>/dev/null || true)
-    if [ -n "$VPN_IP" ]; then
-        echo "  ✓ VPN active (IP: $VPN_IP)"
-    else
-        echo "  ✗ VPN not working — Transmission may be exposed"
-        HEALTH_OK=false
-    fi
+    check_api "VPN active" \
+        "docker exec gluetun wget -qO- https://am.i.mullvad.net/ip" \
+        "VPN not working — Transmission may be exposed"
 fi
 
 if [ "$HEALTH_OK" = true ]; then
